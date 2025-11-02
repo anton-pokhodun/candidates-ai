@@ -22,5 +22,13 @@ any candidate to view detailed information and a summary of their profile.
 
 
 ### Code
+
+```bash
 pip install llama-index
+pip install llama-index-node-parser-slide
+pip install llama-index-vector-stores-chroma
+pip install llama-index-embeddings-huggingface
+pip install ipython
+
+```
 
