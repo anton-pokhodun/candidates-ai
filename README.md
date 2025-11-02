@@ -21,7 +21,7 @@ summary of each candidate’s strongest skills and professional highlights.
 any candidate to view detailed information and a summary of their profile.
 
 
-### Code
+### Install dependencies
 
 ```bash
 pip install llama-index
@@ -32,3 +32,10 @@ pip install ipython
 pip install "fastapi[standard]"
 ```
 
+
+
+### Run dev server
+
+```bash
+fastapi dev backend.py
+```
