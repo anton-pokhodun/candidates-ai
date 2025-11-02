@@ -29,6 +29,6 @@ pip install llama-index-node-parser-slide
 pip install llama-index-vector-stores-chroma
 pip install llama-index-embeddings-huggingface
 pip install ipython
-
+pip install "fastapi[standard]"
 ```
 
