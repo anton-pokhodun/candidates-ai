@@ -55,26 +55,47 @@ def print_retrieved_chunks(response):
 
 
 if __name__ == "__main__":
-    # Example usage
-    #
-    qa_prompt_tmpl = PromptTemplate(
+    list_prompt_tmpl = PromptTemplate(
         "Context information is below.\n"
         "---------------------\n"
         "{context_str}\n"
         "---------------------\n"
-        "Given the context information and not prior knowledge, "
-        "answer the query in detail. Include specific information such as:\n"
-        "- All Names and titles\n"
-        "- Education and qualifications\n"
-        "- Years of experience\n"
-        "- Specific skills and areas of expertise\n"
-        "- Notable achievements or projects\n"
-        "- All certification, or diplomas if exist\n"
+        "CRITICAL: You MUST extract ALL unique candidates from the context above. DO NOT skip any candidates.\n\n"
+        "For each candidate, provide:\n"
+        "- Source File: Extract the source_file or file_path from the chunk metadata\n"
+        "- Full name (if not available in the CV, assign a unique placeholder name from Hollywood stars: use names like 'Brad Pitt', 'Tom Cruise', 'Leonardo DiCaprio', etc. - make sure each candidate gets a DIFFERENT name)\n"
+        "- Current profession or job title (use ACTUAL information from CV)\n"
+        "- Years of commercial experience: Calculate total years based on ACTUAL CV information:\n"
+        "  * If CV explicitly states total experience (e.g., '5 years of experience', '3+ years'), use that number\n"
+        "  * If CV lists employment periods with dates, calculate the difference between earliest start date and latest end date\n"
+        "  * Accept date formats: 'Month Year' (June 2015), 'Year/Month' (2015/06), 'MM/YYYY', 'YYYY-MM', etc.\n"
+        "  * Example: 'June 2014 - August 2015' + 'March 2016 - Present' = calculate from June 2014 to Present\n"
+        "  * If only years are given (e.g., '2014-2016', '2017-2020'), sum the periods\n"
+        "  * Round to nearest whole number or use decimals (e.g., 2.5 years)\n"
+        "  * If no experience information is found, state 'Not specified'\n"
+        "- Key skills: Extract ALL skills mentioned in the CV, including:\n"
+        "  * Programming languages (e.g., Python, Java, JavaScript, C++)\n"
+        "  * Frameworks and libraries (e.g., React, Django, Spring, TensorFlow)\n"
+        "  * Tools and technologies (e.g., Docker, Kubernetes, Git, AWS)\n"
+        "  * Databases (e.g., PostgreSQL, MongoDB, MySQL)\n"
+        "  * Methodologies (e.g., Agile, Scrum, TDD)\n"
+        "  * Soft skills (e.g., Leadership, Communication, Team collaboration)\n"
+        "  * Domain knowledge (e.g., Machine Learning, Cloud Architecture, DevOps)\n"
+        "  * Certifications and specializations\n"
+        "  * List all skills found, separated by commas\n"
+        "  * If no skills are found, state 'Not specified'\n"
+        "- Education (use ACTUAL information from CV, if mentioned)\n\n"
+        "IMPORTANT: \n"
+        "1. Use real CV data for all fields except the name. Only replace missing names with Hollywood star names.\n"
+        "2. You MUST list EVERY SINGLE candidate - if you see 20 different source files, list ALL 20 candidates.\n"
+        "3. Format the response as a structured list with these fields clearly labeled.\n"
+        "4. Each candidate should be separated by a blank line.\n"
+        "5. Start your response with: 'Total candidates found: [NUMBER]'\n\n"
         "Query: {query_str}\n"
         "Answer: "
     )
     query_engine = get_query_engine(
-        similarity_top_k=10, text_qa_template=qa_prompt_tmpl
+        similarity_top_k=10, text_qa_template=list_prompt_tmpl
     )
     query = "I want to find a teacher of history. If there are any - provide me a summary of their background."
 
