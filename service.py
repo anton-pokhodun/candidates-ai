@@ -140,15 +140,14 @@ CV Content:
 {full_text}
 
 Please provide a comprehensive summary with the following sections:
-1. **Full Name**: Extract the candidate's full name
-2. **Current Position**: Current or most recent job title and company
-3. **Professional Summary**: A brief 2-3 sentence overview of their career
-4. **Years of Experience**: Calculate total years of professional experience based on employment dates
-5. **Key Skills**: List all technical skills, tools, frameworks, and technologies (organized by category if applicable)
-6. **Work Experience**: Summarize each position with company name, role, dates, and key responsibilities/achievements
-7. **Education**: Degrees, institutions, and graduation years
-8. **Certifications**: Any professional certifications or additional training
-9. **Notable Achievements**: Key accomplishments or projects worth highlighting
+1. **Current Position**: Current or most recent job title and company
+2. **Professional Summary**: A brief 2-3 sentence overview of their career
+3. **Years of Experience**: Calculate total years of professional experience based on employment dates
+4. **Key Skills**: List all technical skills, tools, frameworks, and technologies (organized by category if applicable)
+5. **Work Experience**: Summarize each position with company name, role, dates, and key responsibilities/achievements
+6. **Education**: Degrees, institutions, and graduation years
+7. **Certifications**: Any professional certifications or additional training
+8. **Notable Achievements**: Key accomplishments or projects worth highlighting
 
 Format the response in a clear, professional manner using markdown. Be concise but thorough.
 If any information is not available in the CV, indicate "Not specified" for that section.
