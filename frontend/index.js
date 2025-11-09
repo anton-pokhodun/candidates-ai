@@ -154,3 +154,8 @@ window.addEventListener('beforeunload', () => {
 // Initialize
 loadCandidates();
 
+// Set focus to search box on page load
+setTimeout(() => {
+  document.getElementById('searchBox')?.focus();
+}, 100);
+
