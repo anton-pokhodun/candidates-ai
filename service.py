@@ -56,18 +56,15 @@ def get_all_candidates():
 
     for metadata in all_docs.get("metadatas", []):
         if metadata and "candidate_name" in metadata:
-            name = metadata["candidate_name"]
-            candidate_names.add(name)
+            id = metadata["candidate_id"]
 
-            # Store additional info for each candidate
-            if name not in candidate_info:
-                candidate_info[name] = {
-                    "name": name,
-                    "file_name": metadata.get("file_name", "unknown"),
-                    # "profession": metadata.get("profession", "Unknown"),
-                }
+            candidate_info[id] = {
+                "candidate_id": metadata["candidate_id"],
+                "candidate_name": metadata["candidate_name"],
+                "file_name": metadata.get("file_name", "unknown"),
+            }
 
-    return sorted(list(candidate_names)), candidate_info
+    return candidate_info
 
 
 def get_candidate_by_id(candidate_id: str, use_llm: bool = True):
@@ -86,12 +83,14 @@ def get_candidate_by_id(candidate_id: str, use_llm: bool = True):
     documents = all_docs.get("documents", [])
 
     for i, metadata in enumerate(metadatas):
-        if metadata and metadata.get("candidate_name") == candidate_id:
+        print(f"Checking metadata {metadata.get('candidate_id', '')}")
+        if metadata and metadata.get("candidate_id") == int(candidate_id):
+            print(f"Passesd Checking metadata {metadata.get('candidate_id', '')}")
             if candidate_metadata is None:
                 candidate_metadata = {
-                    "name": metadata.get("candidate_name"),
+                    "candidate_name": metadata.get("candidate_name"),
+                    "candidate_id": metadata.get("candidate_id"),
                     "file_name": metadata.get("file_name", "unknown"),
-                    "profession": metadata.get("profession", "Unknown"),
                 }
 
             if i < len(documents):
@@ -125,9 +124,9 @@ def generate_candidate_summary_stream(candidate_id: str):
     import json
 
     metadata = {
-        "name": candidate_data["name"],
+        "candidate_id": candidate_data["candidate_id"],
+        "candidate_name": candidate_data["candidate_name"],
         "file_name": candidate_data["file_name"],
-        "profession": candidate_data["profession"],
     }
     yield f"data: {json.dumps({'type': 'metadata', 'data': metadata})}\n\n"
 

@@ -19,9 +19,9 @@ app.add_middleware(
 
 
 class CandidateInfo(BaseModel):
-    name: str
+    candidate_id: int
+    candidate_name: str
     file_name: str
-    profession: str
 
 
 class CandidateDetail(BaseModel):
@@ -57,18 +57,19 @@ def read_root():
 @app.get("/candidates", response_model=CandidatesResponse)
 async def get_candidates():
     try:
-        all, data = get_all_candidates()
+        data = get_all_candidates()
         candidates = [
             CandidateInfo(
-                name=name,
+                candidate_id=id,
+                candidate_name=info.get("candidate_name", "unknown"),
                 file_name=info.get("file_name", "unknown"),
-                profession=info.get("profession", "Unknown"),
             )
-            for name, info in data.items()
+            for id, info in data.items()
         ]
 
         return CandidatesResponse(
-            total=len(candidates), candidates=sorted(candidates, key=lambda x: x.name)
+            total=len(candidates),
+            candidates=sorted(candidates, key=lambda x: x.candidate_name),
         )
     except Exception as e:
         raise HTTPException(

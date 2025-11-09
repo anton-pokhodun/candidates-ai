@@ -26,18 +26,17 @@ function renderCandidatesList(candidates) {
     listElement.innerHTML = '<p style="color: #999; text-align: center;">No candidates found</p>';
     return;
   }
-
   listElement.innerHTML = candidates.map(candidate => `
-                <div class="candidate-item" onclick="selectCandidate('${candidate.name}')" data-id="${candidate.name}">
-                    <h3>${candidate.name}</h3>
-                    <p>${candidate.file_name}</p>
+                <div class="candidate-item" onclick="selectCandidate('${candidate.candidate_id}')" data-id="${candidate.candidate_id}">
+                    <h3>${candidate.candidate_name}</h3>
+                    <p>#${candidate.candidate_id}</p>
+                    <p>file:${candidate.file_name}</p>
                 </div>
             `).join('');
 }
 
 // Select and load candidate details with streaming
 async function selectCandidate(candidateId) {
-  console.log("Selected candidate:", candidateId);
   // Close previous stream if exists
   if (currentEventSource) {
     currentEventSource.close();
@@ -75,14 +74,14 @@ async function selectCandidate(candidateId) {
           metadata = message.data;
           // Initialize the details view
           detailsElement.innerHTML = `
-                                <div class="summary-content">
-                                    <h1>${metadata.name}</h1>
-                                    <p><strong>File:</strong> ${metadata.file_name}</p>
-                                    <p><strong>Profession:</strong> ${metadata.profession}</p>
-                                    <hr style="margin: 20px 0; border: 1px solid #e0e0e0;">
-                                    <div id="streamingContent"></div>
-                                </div>
-                            `;
+            <div class="summary-content">
+                <h1>${metadata.candidate_name}</h1>
+                <p><strong>ID:</strong> ${metadata.candidate_id}</p>
+                <p><strong>File:</strong> ${metadata.file_name}</p>
+                <hr style="margin: 20px 0; border: 1px solid #e0e0e0;">
+                <div id="streamingContent"></div>
+            </div>
+          `;
         } else if (message.type === 'content') {
           contentBuffer += message.data;
           updateStreamingContent(contentBuffer);
@@ -140,8 +139,7 @@ function updateStreamingContent(content) {
 document.getElementById('searchBox').addEventListener('input', (e) => {
   const searchTerm = e.target.value.toLowerCase();
   const filtered = allCandidates.filter(candidate =>
-    candidate.name.toLowerCase().includes(searchTerm) ||
-    candidate.profession.toLowerCase().includes(searchTerm)
+    candidate.candidate_name.toLowerCase().includes(searchTerm)
   );
   renderCandidatesList(filtered);
 });
