@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
-from retrieve import get_all_candidates, get_candidate_by_id
+from service import get_all_candidates, get_candidate_by_id
 
 app = FastAPI(title="Candidates AI API", version="1.0.0")
 
@@ -77,7 +77,7 @@ async def get_candidates():
 @app.get("/candidates/{candidate_id}", response_model=CandidateDetail)
 async def get_candidate_details(candidate_id: str, use_llm: bool = True):
     """
-    Retrieve detailed information for a specific candidate by ID.
+    service detailed information for a specific candidate by ID.
 
     Args:
         candidate_id: The candidate's ID (e.g., "Candidate#1" or actual name)
