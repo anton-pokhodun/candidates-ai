@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidates AI - Browse Candidates</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .candidates-list {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .candidates-list h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.5rem;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .candidate-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .candidate-item:hover {
+            background-color: #f5f5f5;
+            border-color: #667eea;
+        }
+
+        .candidate-item.active {
+            background-color: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .candidate-item h3 {
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .candidate-item p {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        .candidate-details {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .candidate-details.empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            color: #999;
+            font-size: 1.2rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background-color: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .summary-content {
+            line-height: 1.6;
+        }
+
+        .summary-content h1,
+        .summary-content h2,
+        .summary-content h3 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .summary-content h1 {
+            font-size: 1.8rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .summary-content h2 {
+            font-size: 1.4rem;
+        }
+
+        .summary-content h3 {
+            font-size: 1.1rem;
+        }
+
+        .summary-content ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        .summary-content li {
+            margin-bottom: 5px;
+        }
+
+        .summary-content p {
+            margin-bottom: 10px;
+        }
+
+        .summary-content strong {
+            color: #667eea;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .candidates-list {
+                max-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Candidates AI</h1>
+            <p>Browse and explore candidate profiles</p>
+        </header>
+
+        <div class="main-content">
+            <div class="candidates-list">
+                <h2>Candidates</h2>
+                <input type="text" class="search-box" id="searchBox" placeholder="Search candidates...">
+                <div id="candidatesList"></div>
+            </div>
+
+            <div class="candidate-details empty" id="candidateDetails">
+                <p>Select a candidate to view details</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        let allCandidates = [];
+        let selectedCandidateId = null;
+
+        // Fetch all candidates on page load
+        async function loadCandidates() {
+            const listElement = document.getElementById('candidatesList');
+            listElement.innerHTML = '<div class="loading"><div class="spinner"></div>Loading candidates...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/candidates`);
+                const data = await response.json();
+                allCandidates = data.candidates;
+                renderCandidatesList(allCandidates);
+            } catch (error) {
+                listElement.innerHTML = `<div class="error">Failed to load candidates: ${error.message}</div>`;
+            }
+        }
+
+        // Render candidates list
+        function renderCandidatesList(candidates) {
+            const listElement = document.getElementById('candidatesList');
+
+            if (candidates.length === 0) {
+                listElement.innerHTML = '<p style="color: #999; text-align: center;">No candidates found</p>';
+                return;
+            }
+
+            listElement.innerHTML = candidates.map(candidate => `
+                <div class="candidate-item" onclick="selectCandidate('${candidate.name}')" data-id="${candidate.name}">
+                    <h3>${candidate.name}</h3>
+                    <p>${candidate.file_name}</p>
+                </div>
+            `).join('');
+        }
+
+        // Select and load candidate details
+        async function selectCandidate(candidateId) {
+            selectedCandidateId = candidateId;
+
+            // Update active state
+            document.querySelectorAll('.candidate-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.id === candidateId) {
+                    item.classList.add('active');
+                }
+            });
+
+            // Load details
+            const detailsElement = document.getElementById('candidateDetails');
+            detailsElement.classList.remove('empty');
+            detailsElement.innerHTML = '<div class="loading"><div class="spinner"></div>Loading candidate details...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/candidates/${encodeURIComponent(candidateId)}?use_llm=true`);
+                const data = await response.json();
+                renderCandidateDetails(data);
+            } catch (error) {
+                detailsElement.innerHTML = `<div class="error">Failed to load candidate details: ${error.message}</div>`;
+            }
+        }
+
+        // Render candidate details
+        function renderCandidateDetails(candidate) {
+            const detailsElement = document.getElementById('candidateDetails');
+
+            // Convert markdown-like formatting to HTML
+            let formattedSummary = candidate.formatted_summary || 'No summary available';
+
+            // Simple markdown-to-HTML conversion
+            formattedSummary = formattedSummary
+                .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+                .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+                .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/^- (.+)$/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+            detailsElement.innerHTML = `
+                <div class="summary-content">
+                    <p>${formattedSummary}</p>
+                </div>
+            `;
+        }
+
+        // Search functionality
+        document.getElementById('searchBox').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filtered = allCandidates.filter(candidate =>
+                candidate.name.toLowerCase().includes(searchTerm) ||
+                candidate.profession.toLowerCase().includes(searchTerm)
+            );
+            renderCandidatesList(filtered);
+        });
+
+        // Initialize
+        loadCandidates();
+    </script>
+</body>
+</html>
