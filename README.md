@@ -9,6 +9,10 @@ Candidates AI allows you to:
 - Generate AI-powered summaries of candidate profiles
 - Anonymize candidate data using pseudonyms
 
+ 
+https://github.com/user-attachments/assets/0973188b-3a47-4293-8348-48089dc8b4be
+
+
 ## Technologies Used
 
 ### Backend
