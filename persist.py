@@ -4,8 +4,8 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core import StorageContext
-from IPython.display import Markdown, display
 import chromadb
+import re
 
 load_dotenv()
 
@@ -50,12 +50,57 @@ print("Creating chunks...")
 nodes = node_parser.get_nodes_from_documents(documents)
 print(f"Created {len(nodes)} chunks")
 
-# Ensure metadata propagates to nodes
+
+def extract_candidate_name(text, file_name):
+    """Extract candidate name from CV text or use file name."""
+    # Try to find name patterns in the first 500 characters
+    text_start = text[:500].strip()
+
+    name_pattern = (
+        r"(?:Name|Full Name|Candidate Name)[\s:]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)"
+    )
+    match = re.search(name_pattern, text_start, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    if file_name and file_name != "unknown":
+        name_from_file = (
+            file_name.replace(".pdf", "").replace(".txt", "").replace(".docx", "")
+        )
+        name_from_file = name_from_file.replace("_", " ").replace("-", " ").strip()
+        # If it looks like a name, use it
+        if re.match(r"^[A-Za-z\s]+$", name_from_file) and len(name_from_file) < 50:
+            return name_from_file.title()
+
+    return None
+
+
+# Extract candidate names from documents
+candidate_names = {}
+candidate_counter = 1
+
+for doc in documents:
+    file_name = doc.metadata.get("file_name", "unknown")
+    extracted_name = extract_candidate_name(doc.text, file_name)
+
+    if extracted_name:
+        candidate_names[doc.doc_id] = extracted_name
+        print(f"Found candidate name: {extracted_name} from {file_name}")
+    else:
+        candidate_names[doc.doc_id] = f"candidate_{candidate_counter}"
+        print(f"No name found in {file_name}, using candidate_{candidate_counter}")
+        candidate_counter += 1
+
+
 for node in nodes:
-    if not node.metadata.get("source_file"):
-        # Fallback if metadata didn't propagate
-        node.metadata["source_file"] = "unknown"
-        node.metadata["doc_type"] = "resume"
+    if not node.metadata.get("file_name"):
+        node.metadata["file_name"] = "unknown"
+
+    ref_doc_id = node.ref_doc_id
+    node.metadata["candidate_name"] = candidate_names.get(ref_doc_id, "Candidate#0")
+
+    if not node.metadata.get("profession"):
+        node.metadata["profession"] = "Unknown Profession"
 
 if nodes:
     print(f"\nSample chunk metadata: {nodes[0].metadata}")
