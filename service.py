@@ -110,11 +110,32 @@ def get_candidate_by_id(candidate_id: str, use_llm: bool = True):
         "chunks": candidate_chunks,
     }
 
-    # Use LLM to generate a formatted summary
-    if use_llm and full_text:
-        llm = OpenAI(model="gpt-4o-mini", temperature=0.2)
+    return result
 
-        prompt = f"""Based on the following CV information, create a well-structured professional summary.
+
+def generate_candidate_summary_stream(candidate_id: str):
+    """Generate a streaming response for candidate summary."""
+    candidate_data = get_candidate_by_id(candidate_id, use_llm=False)
+
+    if candidate_data is None:
+        yield 'data: {"error": "Candidate not found"}\n\n'
+        return
+
+    # First, send the basic metadata
+    import json
+
+    metadata = {
+        "name": candidate_data["name"],
+        "file_name": candidate_data["file_name"],
+        "profession": candidate_data["profession"],
+    }
+    yield f"data: {json.dumps({'type': 'metadata', 'data': metadata})}\n\n"
+
+    # Then stream the LLM response
+    full_text = candidate_data["full_text"]
+    llm = OpenAI(model="gpt-4o-mini", temperature=0.2)
+
+    prompt = f"""Based on the following CV information, create a well-structured professional summary.
 
 CV Content:
 {full_text}
@@ -134,10 +155,14 @@ Format the response in a clear, professional manner using markdown. Be concise b
 If any information is not available in the CV, indicate "Not specified" for that section.
 """
 
-        llm_response = llm.complete(prompt)
-        result["formatted_summary"] = str(llm_response)
+    # Stream the response
+    response_stream = llm.stream_complete(prompt)
 
-    return result
+    for chunk in response_stream:
+        if chunk.delta:
+            yield f"data: {json.dumps({'type': 'content', 'data': chunk.delta})}\n\n"
+
+    yield 'data: {"type": "done"}\n\n'
 
 
 def print_retrieved_chunks(response):

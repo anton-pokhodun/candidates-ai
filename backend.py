@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
-from service import get_all_candidates, get_candidate_by_id
+from service import get_all_candidates, generate_candidate_summary_stream
+
+from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="Candidates AI API", version="1.0.0")
 
@@ -77,22 +79,19 @@ async def get_candidates():
 @app.get("/candidates/{candidate_id}", response_model=CandidateDetail)
 async def get_candidate_details(candidate_id: str, use_llm: bool = True):
     """
-    service detailed information for a specific candidate by ID.
-
-    Args:
-        candidate_id: The candidate's ID (e.g., "Candidate#1" or actual name)
-        use_llm: Whether to generate formatted summary using LLM (default: True)
+    Stream candidate details with LLM-generated summary.
+    Returns Server-Sent Events (SSE) stream.
     """
     try:
-        candidate_data = get_candidate_by_id(candidate_id, use_llm=use_llm)
-
-        if candidate_data is None:
-            raise HTTPException(
-                status_code=404, detail=f"Candidate '{candidate_id}' not found"
-            )
-
-        return CandidateDetail(**candidate_data)
+        return StreamingResponse(
+            generate_candidate_summary_stream(candidate_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Error retrieving candidate details: {str(e)}"
+            status_code=500, detail=f"Error streaming candidate details: {str(e)}"
         )
