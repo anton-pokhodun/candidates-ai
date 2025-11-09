@@ -1,143 +1,127 @@
-from llama_index.core import VectorStoreIndex, PromptTemplate
+from chromadb.api import ClientAPI
 from dotenv import load_dotenv
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
 from llama_index.llms.openai import OpenAI
+from typing import Dict, Optional, Generator, Any
+import json
 
 load_dotenv()
 
-collection_name = "csv"
+COLLECTION_NAME = "csv"
+CHROMA_DB_PATH = "./chroma_db"
 
 
-def get_chroma_client():
-    """Get or create a persistent ChromaDB client."""
-    return chromadb.PersistentClient(path="./chroma_db")
+# ============================================================================
+# Database Client
+# ============================================================================
+def get_chroma_client() -> ClientAPI:
+    """Get or create a persistent ChromaDB client.
+
+    Returns:
+        chromadb.PersistentClient: Initialized ChromaDB client
+    """
+    return chromadb.PersistentClient(path=CHROMA_DB_PATH)
 
 
-def get_query_engine(
-    similarity_top_k: int = 3, text_qa_template: PromptTemplate | None = None
-):
-    """Create a query engine from the persisted ChromaDB collection."""
+# ============================================================================
+# Candidate Retrieval
+# ============================================================================
+def get_all_candidates() -> Dict[int, Dict[str, Any]]:
+    """Retrieve all unique candidates from the ChromaDB collection.
 
-    # Settings.llm = OpenAI(model="gpt-4", temperature=0.1)
-    # Get the persisted collection
+    Returns:
+        Dict mapping candidate_id to candidate information containing:
+            - candidate_id: Unique identifier
+            - candidate_name: Full name
+            - file_name: Source file name
+    """
     chroma_client = get_chroma_client()
-    collection = chroma_client.get_collection(name=collection_name)
+    collection = chroma_client.get_collection(name=COLLECTION_NAME)
 
-    # Create embedding model (must match the one used during indexing)
-    embedding = OpenAIEmbedding()
-
-    # Create vector store from existing collection
-    vector_store = ChromaVectorStore(chroma_collection=collection, embedding=embedding)
-
-    # Create index from vector store
-    index = VectorStoreIndex.from_vector_store(
-        vector_store=vector_store, embed_model=embedding
-    )
-
-    # Return query engine
-    return index.as_query_engine(
-        similarity_top_k=similarity_top_k, text_qa_template=text_qa_template
-    )
-
-
-def get_all_candidates():
-    """Retrieve all unique candidate names from the ChromaDB collection."""
-    chroma_client = get_chroma_client()
-    collection = chroma_client.get_collection(name=collection_name)
-
-    # Get all documents from the collection
     all_docs = collection.get(include=["metadatas"])
 
-    # Extract unique candidate names
-    candidate_names = set()
-    candidate_info = {}
+    candidates = {}
+    for metadata in all_docs.get("metadatas") or []:
+        if not metadata or "candidate_id" not in metadata:
+            continue
 
-    for metadata in all_docs.get("metadatas", []):
-        if metadata and "candidate_name" in metadata:
-            id = metadata["candidate_id"]
+        candidate_id = metadata["candidate_id"]
+        candidates[candidate_id] = {
+            "candidate_id": candidate_id,
+            "candidate_name": metadata.get("candidate_name"),
+            "file_name": metadata.get("file_name", "unknown"),
+        }
 
-            candidate_info[id] = {
-                "candidate_id": metadata["candidate_id"],
-                "candidate_name": metadata["candidate_name"],
-                "file_name": metadata.get("file_name", "unknown"),
-            }
-
-    return candidate_info
+    return candidates
 
 
-def get_candidate_by_id(candidate_id: str, use_llm: bool = True):
-    """Retrieve detailed information for a specific candidate by ID."""
+def get_candidate_by_id(candidate_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve detailed information for a specific candidate by ID.
+
+    Args:
+        candidate_id: Unique identifier for the candidate
+
+    Returns:
+        Dictionary containing candidate information:
+            - candidate_id: Unique identifier
+            - candidate_name: Full name
+            - file_name: Source file name
+        Returns None if candidate not found
+    """
     chroma_client = get_chroma_client()
-    collection = chroma_client.get_collection(name=collection_name)
+    collection = chroma_client.get_collection(name=COLLECTION_NAME)
 
-    # Get all documents from the collection
     all_docs = collection.get(include=["metadatas", "documents"])
-
-    # Find all chunks belonging to this candidate
-    candidate_chunks = []
-    candidate_metadata = None
 
     metadatas = all_docs.get("metadatas", [])
     documents = all_docs.get("documents", [])
 
-    for i, metadata in enumerate(metadatas):
-        print(f"Checking metadata {metadata.get('candidate_id', '')}")
-        if metadata and metadata.get("candidate_id") == int(candidate_id):
-            print(f"Passesd Checking metadata {metadata.get('candidate_id', '')}")
-            if candidate_metadata is None:
-                candidate_metadata = {
-                    "candidate_name": metadata.get("candidate_name"),
-                    "candidate_id": metadata.get("candidate_id"),
-                    "file_name": metadata.get("file_name", "unknown"),
-                }
+    candidate_chunks = []
+    candidate_metadata = None
 
-            if i < len(documents):
-                candidate_chunks.append(documents[i])
+    for i, metadata in enumerate(metadatas or []):
+        if not metadata or metadata.get("candidate_id") != int(candidate_id):
+            continue
+
+        # Store metadata from first matching chunk
+        if candidate_metadata is None:
+            candidate_metadata = {
+                "candidate_id": metadata.get("candidate_id"),
+                "candidate_name": metadata.get("candidate_name"),
+                "file_name": metadata.get("file_name", "unknown"),
+            }
+
+        # Collect all text chunks for this candidate
+        if documents and i < len(documents):
+            candidate_chunks.append(documents[i])
 
     if candidate_metadata is None:
         return None
 
-    # Combine all chunks to get full CV text
-    full_text = "\n\n".join(candidate_chunks)
-
-    result = {
+    return {
         **candidate_metadata,
         "chunks_count": len(candidate_chunks),
-        "full_text": full_text,
+        "full_text": "\n\n".join(candidate_chunks),
         "chunks": candidate_chunks,
     }
 
-    return result
 
+# ============================================================================
+# Summary Generation
+# ============================================================================
+def _build_summary_prompt(cv_text: str) -> str:
+    """Build the prompt for CV summary generation.
 
-def generate_candidate_summary_stream(candidate_id: str):
-    """Generate a streaming response for candidate summary."""
-    candidate_data = get_candidate_by_id(candidate_id, use_llm=False)
+    Args:
+        cv_text: Complete CV text
 
-    if candidate_data is None:
-        yield 'data: {"error": "Candidate not found"}\n\n'
-        return
-
-    # First, send the basic metadata
-    import json
-
-    metadata = {
-        "candidate_id": candidate_data["candidate_id"],
-        "candidate_name": candidate_data["candidate_name"],
-        "file_name": candidate_data["file_name"],
-    }
-    yield f"data: {json.dumps({'type': 'metadata', 'data': metadata})}\n\n"
-
-    # Then stream the LLM response
-    full_text = candidate_data["full_text"]
-    llm = OpenAI(model="gpt-4o-mini", temperature=0.2)
-
-    prompt = f"""Based on the following CV information, create a well-structured professional summary.
+    Returns:
+        Formatted prompt string
+    """
+    return f"""Based on the following CV information, create a well-structured professional summary.
 
 CV Content:
-{full_text}
+{cv_text}
 
 Please provide a comprehensive summary with the following sections:
 1. **Current Position**: Current or most recent job title and company
@@ -153,48 +137,42 @@ Format the response in a clear, professional manner using markdown. Be concise b
 If any information is not available in the CV, indicate "Not specified" for that section.
 """
 
-    # Stream the response
-    response_stream = llm.stream_complete(prompt)
 
+def generate_candidate_summary_stream(candidate_id: str) -> Generator[str, None, None]:
+    """Generate a streaming Server-Sent Events response for candidate summary.
+
+    Args:
+        candidate_id: Unique identifier for the candidate
+
+    Yields:
+        SSE-formatted strings containing:
+            - metadata event with candidate information
+            - content events with streaming summary text
+            - done event when complete
+            - error event if candidate not found
+    """
+    candidate_data = get_candidate_by_id(candidate_id)
+
+    if candidate_data is None:
+        yield 'data: {"error": "Candidate not found"}\n\n'
+        return
+
+    # Send candidate metadata
+    metadata = {
+        "candidate_id": candidate_data["candidate_id"],
+        "candidate_name": candidate_data["candidate_name"],
+        "file_name": candidate_data["file_name"],
+    }
+    yield f"data: {json.dumps({'type': 'metadata', 'data': metadata})}\n\n"
+
+    # Initialize LLM and generate summary
+    llm = OpenAI(model="gpt-4o-mini", temperature=0.2)
+    prompt = _build_summary_prompt(candidate_data["full_text"])
+
+    # Stream the LLM response
+    response_stream = llm.stream_complete(prompt)
     for chunk in response_stream:
         if chunk.delta:
             yield f"data: {json.dumps({'type': 'content', 'data': chunk.delta})}\n\n"
 
     yield 'data: {"type": "done"}\n\n'
-
-
-def print_retrieved_chunks(response):
-    """Display retrieved chunks with scores and metadata."""
-    print("\n" + "=" * 80)
-    print(f"RETRIEVED CHUNKS ({len(response.source_nodes)} total)")
-    print("=" * 80)
-
-    for i, node in enumerate(response.source_nodes, 1):
-        print(f"\n--- Chunk {i} (Score: {node.score:.4f}) ---")
-        print(f"Text: {node.text}")
-        if node.metadata:
-            print(f"Metadata: {node.metadata}")
-
-
-if __name__ == "__main__":
-    candidate_id = "Candidate#1"  # Change this to any candidate ID from the list above
-    candidate = get_candidate_by_id(candidate_id, use_llm=True)
-
-    if candidate:
-        print(f"\n{'=' * 80}")
-        print(f"Candidate: {candidate['name']}")
-        print(f"File: {candidate['file_name']}")
-        print(f"Chunks: {candidate['chunks_count']}")
-        print(f"{'=' * 80}\n")
-
-        # Print the LLM-formatted summary
-        if "formatted_summary" in candidate:
-            print(candidate["formatted_summary"])
-        else:
-            print("No formatted summary available (use_llm=False)")
-            print("\nRaw CV Text:")
-            print(candidate["full_text"])
-    else:
-        print(f"\nCandidate '{candidate_id}' not found!")
-
-    print("\n" + "=" * 80)
