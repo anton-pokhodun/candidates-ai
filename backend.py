@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from service import get_all_candidates, generate_candidate_summary_stream
-
+from agent import search_with_agent
 from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="Candidates AI API", version="1.0.0")
@@ -47,6 +47,19 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     sources: List[Dict]
+
+
+class SearchResult(BaseModel):
+    candidate_id: str
+    candidate_name: str
+    file_name: str
+    score: float
+    content: str
+
+
+class QuerySearchResponse(BaseModel):
+    answer: str
+    matching_candidates: List[SearchResult]
 
 
 @app.get("/")
@@ -95,4 +108,31 @@ async def get_candidate_details(candidate_id: str, use_llm: bool = True):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error streaming candidate details: {str(e)}"
+        )
+
+
+@app.post("/search", response_model=QuerySearchResponse)
+async def search_candidates_endpoint(request: QueryRequest):
+    """
+    Search for candidates using natural language query.
+    """
+    try:
+        results = await search_with_agent(request.query)
+
+        return QuerySearchResponse(
+            answer=results["answer"],
+            matching_candidates=[
+                SearchResult(
+                    candidate_id=r["candidate_id"],
+                    candidate_name=r["candidate_name"],
+                    file_name=r["file_name"],
+                    score=r["score"],
+                    content=r["content"],
+                )
+                for r in results["candidates"]
+            ],
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error searching candidates: {str(e)}"
         )
