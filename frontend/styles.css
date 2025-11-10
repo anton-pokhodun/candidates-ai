@@ -138,15 +138,6 @@ header p {
     display: block;
 }
 
-#candidate-details.empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 400px;
-    color: #999;
-    font-size: 1.2rem;
-}
-
 .search-panel {
     display: flex;
     flex-direction: column;

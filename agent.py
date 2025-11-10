@@ -152,11 +152,8 @@ async def search_with_agent(query: str, top_k: int = 10) -> dict:
     agent = create_agent()
     ctx = Context(agent)
 
-    # Enhance query to ensure agent uses the search tool
-    enhanced_query = f"{query}. Search for the top {top_k} most relevant candidates and provide their details."
-
     # Run agent
-    handler = agent.run(enhanced_query, ctx=ctx)
+    handler = agent.run(query, ctx=ctx)
 
     # Collect agent response
     agent_response = ""
