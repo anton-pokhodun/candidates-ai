@@ -19,12 +19,28 @@
                 <input type="text" class="search-box" id="searchBox" placeholder="Search candidates...">
                 <div id="candidatesList"></div>
             </div>
+            <div class="right-panel">
+                <div class="panel-toggle">
+                    <button class="toggle-btn active" data-panel="details">Candidate Details</button>
+                    <button class="toggle-btn" data-panel="search">AI Search</button>
+                </div>
 
-            <div class="candidate-details empty" id="candidateDetails">
-                <p>Select a candidate to view details</p>
+                <div id="candidate-details" class="candidate-details empty panel-content active">
+                    Select a candidate to view details
+                </div>
+
+                <div id="searchPanel" class="search-panel panel-content">
+                    <div class="search-input-section">
+                        <textarea id="aiSearchInput" class="ai-search-input" placeholder="Ask about candidates (e.g., 'Find Python developers with 5+ years experience')"></textarea>
+                        <button id="aiSearchBtn" class="ai-search-btn">Search</button>
+                    </div>
+                    <div id="aiSearchResults" class="ai-search-results">
+                        <p class="placeholder-text">Enter a search query to find candidates using AI</p>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+      </div>
 
     <script src="frontend/index.js"></script>
 </body>

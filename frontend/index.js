@@ -54,7 +54,7 @@ async function selectCandidate(candidateId) {
   });
 
   // Load details with streaming
-  const detailsElement = document.getElementById('candidateDetails');
+  const detailsElement = document.getElementById('candidate-details');
   detailsElement.classList.remove('empty');
   detailsElement.innerHTML = '<div class="loading"><div class="spinner"></div>Loading candidate details...</div>';
 
@@ -153,6 +153,125 @@ window.addEventListener('beforeunload', () => {
 
 // Initialize
 loadCandidates();
+
+// Panel switching
+function switchPanel(panelName) {
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.panel === panelName) {
+      btn.classList.add('active');
+    }
+  });
+
+  document.querySelectorAll('.panel-content').forEach(panel => {
+    panel.classList.remove('active');
+  });
+
+  if (panelName === 'details') {
+    document.getElementById('candidate-details').classList.add('active');
+  } else if (panelName === 'search') {
+    document.getElementById('searchPanel').classList.add('active');
+  }
+}
+
+// AI Search functionality
+async function performAISearch() {
+  const query = document.getElementById('aiSearchInput').value.trim();
+  if (!query) return;
+
+  const resultsElement = document.getElementById('aiSearchResults');
+  const searchBtn = document.getElementById('aiSearchBtn');
+
+  searchBtn.disabled = true;
+  searchBtn.textContent = 'Searching...';
+  resultsElement.innerHTML = '<div class="loading"><div class="spinner"></div>Searching candidates...</div>';
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, top_k: 10 })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Update filtered candidates
+    filteredCandidateIds = data.matching_candidates.map(c => c.candidate_id);
+    renderCandidatesList(allCandidates);
+
+    // Display results
+    displaySearchResults(data);
+  } catch (error) {
+    resultsElement.innerHTML = `<div class="error">Search failed: ${error.message}</div>`;
+  } finally {
+    searchBtn.disabled = false;
+    searchBtn.textContent = 'Search';
+  }
+}
+
+function displaySearchResults(data) {
+  const resultsElement = document.getElementById('aiSearchResults');
+
+  if (data.matching_candidates.length === 0) {
+    resultsElement.innerHTML = '<p class="no-results">No candidates found matching your query.</p>';
+    return;
+  }
+
+  const resultsHTML = `
+    <div class="search-summary">
+      <h3>Search Results</h3>
+      <p>${data.answer}</p>
+      <button class="clear-filter-btn" onclick="clearFilter()">Clear Filter & Show All</button>
+    </div>
+    <div class="search-results-list">
+      ${data.matching_candidates.map((candidate, idx) => `
+        <div class="search-result-item" onclick="selectCandidate('${candidate.candidate_id}')">
+          <div class="result-header">
+            <h4>${idx + 1}. ${candidate.candidate_name}</h4>
+            <span class="score-badge">${(candidate.score * 100).toFixed(1)}%</span>
+          </div>
+          <p class="result-meta">ID: ${candidate.candidate_id} | File: ${candidate.file_name}</p>
+          <p class="result-content">${candidate.content.substring(0, 200)}${candidate.content.length > 200 ? '...' : ''}</p>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  resultsElement.innerHTML = resultsHTML;
+}
+
+function clearFilter() {
+  filteredCandidateIds = null;
+  renderCandidatesList(allCandidates);
+  document.getElementById('aiSearchResults').innerHTML = '<p class="placeholder-text">Enter a search query to find candidates using AI</p>';
+  document.getElementById('aiSearchInput').value = '';
+}
+
+// Panel toggle event listeners - add at initialization
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchPanel(btn.dataset.panel);
+    });
+  });
+
+  // AI Search button event listener
+  document.getElementById('aiSearchBtn').addEventListener('click', performAISearch);
+
+  // AI Search input - submit on Enter (with Shift+Enter for new line)
+  document.getElementById('aiSearchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      performAISearch();
+    }
+  });
+});
 
 // Set focus to search box on page load
 setTimeout(() => {
