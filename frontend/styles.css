@@ -561,3 +561,56 @@ header p {
 .panel-content.active {
     display: block;
 }
+
+.summary-content {
+    line-height: 1.6;
+}
+
+.summary-content h1,
+.summary-content h2,
+.summary-content h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.summary-content h1 {
+    font-size: 1.8rem;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 10px;
+}
+
+.summary-content h2 {
+    font-size: 1.4rem;
+}
+
+.summary-content h3 {
+    font-size: 1.1rem;
+}
+
+.summary-content ul {
+    margin-left: 20px;
+    margin-bottom: 15px;
+}
+
+.summary-content li {
+    margin-bottom: 5px;
+}
+
+.summary-content p {
+    margin-bottom: 10px;
+}
+
+.summary-content strong {
+    color: #667eea;
+}
+
+.agent-thought {
+    color: #ff1493;
+    font-weight: 600;
+}
+
+.agent-action {
+    color: #808080;
+    font-weight: 600;
+}

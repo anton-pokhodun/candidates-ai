@@ -119,6 +119,10 @@ function updateStreamingAnswer(answer, candidates) {
       .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Format agent output - Thought and Action on new lines with colors
+      .replace(/Thought:/g, '<br><span class="agent-thought">Thought:</span>')
+      .replace(/Action:/g, '<br><span class="agent-action">Action:</span>')
+      .replace(/Action Input:/g, '<br><span class="agent-action">Action Input:</span>')
       .replace(/\n\n/g, '</p><p>');
 
     answerElement.innerHTML = `<p>${formattedAnswer}</p>`;
@@ -154,6 +158,10 @@ function updateStreamingContent(content) {
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Format agent output - Thought and Action on new lines with colors
+    .replace(/Thought:/g, '<br><span class="agent-thought">Thought:</span>')
+    .replace(/Action:/g, '<br><span class="agent-action">Action:</span>')
+    .replace(/Action Input:/g, '<br><span class="agent-action">Action Input:</span>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/^- (.+)$/gm, '<li>$1</li>');
 
