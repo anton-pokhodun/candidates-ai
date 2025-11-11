@@ -101,7 +101,7 @@ async def get_candidate_details(candidate_id: str, use_llm: bool = True):
             generate_candidate_summary_stream(candidate_id),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache",
+                "cache-control": "no-cache",
                 "Connection": "keep-alive",
             },
         )
@@ -111,28 +111,22 @@ async def get_candidate_details(candidate_id: str, use_llm: bool = True):
         )
 
 
-@app.post("/search", response_model=QuerySearchResponse)
+@app.post("/search")
 async def search_candidates_endpoint(request: QueryRequest):
     """
-    Search for candidates using natural language query.
+    Stream search results using Server-Sent Events (SSE).
     """
     try:
-        results = await search_with_agent(request.query)
-
-        return QuerySearchResponse(
-            answer=results["answer"],
-            matching_candidates=[
-                SearchResult(
-                    candidate_id=r["candidate_id"],
-                    candidate_name=r["candidate_name"],
-                    file_name=r["file_name"],
-                    score=r["score"],
-                    content=r["content"],
-                )
-                for r in results["candidates"]
-            ],
+        return StreamingResponse(
+            search_with_agent(request.query, request.top_k or 10),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
         )
     except Exception as e:
+        print(f"Error searching candidates: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error searching candidates: {str(e)}"
         )

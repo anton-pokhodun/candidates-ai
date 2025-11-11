@@ -147,28 +147,27 @@ def create_agent() -> ReActAgent:
     return agent
 
 
-async def search_with_agent(query: str, top_k: int = 10) -> dict:
+async def search_with_agent(query: str, top_k: int = 10):
     """Use ReAct agent to search for candidates and return structured results."""
     agent = create_agent()
     ctx = Context(agent)
+    print(f"Processing query: {query}")
+    # Get structured results first
+    structured_results = search_candidates_structured(query, top_k)
 
-    # Run agent
+    # Send metadata first
+    yield f"data: {json.dumps({'type': 'metadata', 'data': {'candidates': structured_results['candidates']}})}\n\n"
+
+    # Run agent and stream response
     handler = agent.run(query, ctx=ctx)
 
-    # Collect agent response
-    agent_response = ""
     async for ev in handler.stream_events():
         if isinstance(ev, AgentStream):
-            agent_response += ev.delta
+            print(ev.delta)
+            chunk_data = {"type": "content", "data": ev.delta}
+            yield f"data: {json.dumps(chunk_data)}\n\n"
 
     await handler
 
-    # Also get structured results directly for the response
-    structured_results = search_candidates_structured(query, top_k)
-
-    return {
-        "answer": agent_response.strip()
-        if agent_response
-        else structured_results["answer"],
-        "candidates": structured_results["candidates"],
-    }
+    # Send completion signal
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"

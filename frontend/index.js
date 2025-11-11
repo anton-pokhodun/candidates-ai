@@ -109,6 +109,39 @@ async function selectCandidate(candidateId) {
   }
 }
 
+function updateStreamingAnswer(answer, candidates) {
+  const answerElement = document.getElementById('streamingAnswer');
+  const resultsListElement = document.getElementById('searchResultsList');
+
+  if (answerElement) {
+    // Convert markdown-like formatting
+    let formattedAnswer = answer
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\n\n/g, '</p><p>');
+
+    answerElement.innerHTML = `<p>${formattedAnswer}</p>`;
+  }
+
+  // Update candidates list if available
+  if (resultsListElement && candidates && candidates.length > 0) {
+    resultsListElement.innerHTML = `
+      <button class="clear-filter-btn" onclick="clearFilter()">Clear Filter & Show All</button>
+      ${candidates.map((candidate, idx) => `
+        <div class="search-result-item" onclick="selectCandidate('${candidate.candidate_id}')">
+          <div class="result-header">
+            <h4>${idx + 1}. ${candidate.candidate_name}</h4>
+            <span class="score-badge">${(candidate.score * 100).toFixed(1)}%</span>
+          </div>
+          <p class="result-meta">ID: ${candidate.candidate_id} | File: ${candidate.file_name}</p>
+          <p class="result-content">${candidate.content.substring(0, 200)}${candidate.content.length > 200 ? '...' : ''}</p>
+        </div>
+      `).join('')}
+    `;
+  }
+}
+
 function updateStreamingContent(content) {
   const contentElement = document.getElementById('streamingContent');
   if (!contentElement) return;
@@ -199,17 +232,51 @@ async function performAISearch() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let candidates = [];
+    let answerBuffer = '';
 
-    // Update filtered candidates
-    filteredCandidateIds = data.matching_candidates.map(c => c.candidate_id);
-    renderCandidatesList(allCandidates);
+    // Initialize results view
+    resultsElement.innerHTML = `
+      <div class="search-summary">
+        <h3>Search Results</h3>
+        <div id="streamingAnswer"></div>
+      </div>
+      <div class="search-results-list" id="searchResultsList"></div>
+    `;
 
-    // Display results
-    displaySearchResults(data);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const message = JSON.parse(line.slice(6));
+
+            if (message.type === 'metadata') {
+              candidates = message.data.candidates;
+            } else if (message.type === 'content') {
+              answerBuffer += message.data;
+              updateStreamingAnswer(answerBuffer, candidates);
+            }
+          } catch (e) {
+            console.error('Error parsing SSE message:', e);
+          }
+        }
+      }
+    }
+
+    searchBtn.disabled = false;
+    searchBtn.textContent = 'Search';
+
   } catch (error) {
+    console.error('Search error:', error);
     resultsElement.innerHTML = `<div class="error">Search failed: ${error.message}</div>`;
-  } finally {
     searchBtn.disabled = false;
     searchBtn.textContent = 'Search';
   }
