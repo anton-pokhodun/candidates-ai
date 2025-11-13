@@ -1,6 +1,5 @@
-import asyncio
 import json
-from typing import List, Dict, Any, Optional
+from typing import Optional
 from dotenv import load_dotenv
 import chromadb
 from chromadb.api import ClientAPI
@@ -9,10 +8,11 @@ from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.agent.workflow import ReActAgent
 from llama_index.core.workflow import Context
-from llama_index.core.agent.workflow import AgentStream, ToolCallResult
+from llama_index.core.agent.workflow import AgentStream
 from llama_index.core.tools import FunctionTool
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import VectorStoreIndex
+import wikipedia
 
 load_dotenv()
 
@@ -91,6 +91,51 @@ def search_candidates(query: str, top_k: int = 3) -> str:
     return "\n\n".join(formatted_results)
 
 
+# ============================================================================
+# Tool 2: General Knowledge Tool
+# ============================================================================
+def search_wikipedia(query: str, sentences: int = 3) -> str:
+    """Search Wikipedia for general knowledge and factual information.
+
+    This tool searches Wikipedia and returns relevant information about general topics,
+    facts, concepts, people, places, and events. Use this for answering general knowledge
+    questions unrelated to candidate resumes.
+
+    Args:
+        query: Search query or topic (e.g., "Python programming language", "Machine learning")
+        sentences: Number of sentences to return from the summary (default: 3)
+
+    Returns:
+        A formatted string containing the Wikipedia summary for the topic
+    """
+    try:
+        # Set language to English
+        wikipedia.set_lang("en")
+
+        # Search for the topic
+        search_results = wikipedia.search(query, results=3)
+
+        if not search_results:
+            return f"No Wikipedia articles found for '{query}'."
+
+        # Get summary of the first result
+        page_title = search_results[0]
+        summary = wikipedia.summary(page_title, sentences=sentences, auto_suggest=False)
+
+        return f"Wikipedia - {page_title}:\n\n{summary}"
+
+    except wikipedia.exceptions.DisambiguationError as e:
+        # Handle disambiguation pages
+        options = e.options[:5]  # Show first 5 options
+        return f"Multiple topics found for '{query}'. Please be more specific. Options include: {', '.join(options)}"
+
+    except wikipedia.exceptions.PageError:
+        return f"No Wikipedia page found for '{query}'. Please try a different search term."
+
+    except Exception as e:
+        return f"Error searching Wikipedia: {str(e)}"
+
+
 def search_candidates_structured(query: str, top_k: Optional[int] = 10) -> dict:
     """Search for candidates and return structured data for API."""
     chroma_client = get_chroma_client()
@@ -140,6 +185,11 @@ def create_agent() -> ReActAgent:
             name="search_candidates",
             description="Search for candidates using natural language queries. Use this to find candidates with specific skills, experience, or qualifications.",
         ),
+        FunctionTool.from_defaults(
+            fn=search_wikipedia,
+            name="search_wikipedia",
+            description="Search Wikipedia for general knowledge, facts, and information about topics, concepts, people, places, or events. Use this for questions unrelated to candidate resumes.",
+        ),
     ]
 
     # Create agent
@@ -156,7 +206,7 @@ async def search_with_agent(query: str, top_k: int = 10):
     structured_results = search_candidates_structured(query, top_k)
 
     # Send metadata first
-    yield f"data: {json.dumps({'type': 'metadata', 'data': {'candidates': structured_results['candidates']}})}\n\n"
+    # yield f"data: {json.dumps({'type': 'metadata', 'data': {'candidates': structured_results['candidates']}})}\n\n"
 
     # Run agent and stream response
     handler = agent.run(query, ctx=ctx)
