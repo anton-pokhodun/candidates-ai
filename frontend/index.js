@@ -95,6 +95,7 @@ function renderCandidateItem(candidate) {
   return `
     <div class="candidate-item" onclick="selectCandidate('${candidate.candidate_id}')" data-id="${candidate.candidate_id}">
       <h3>${candidate.candidate_name}</h3>
+      <p class="candidate-profession">${candidate.profession}</p>
       <p>#${candidate.candidate_id}</p>
       <p>file:${candidate.file_name}</p>
     </div>
@@ -317,7 +318,6 @@ async function performAISearch() {
 function clearFilter() {
   renderCandidatesList(allCandidates);
   getElement('aiSearchInput').innerHTML = '<p class="placeholder-text">Ask about candidates (e.g., "Find software engineers with Python experience", "Search Wikipedia for React", "Create a superhero based on candidate skills")</p>';
-  // getElement('aiSearchInput').value = '';
 }
 
 // ===== Panel Management =====

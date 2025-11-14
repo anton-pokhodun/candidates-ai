@@ -22,6 +22,7 @@ class CandidateInfo(BaseModel):
     candidate_id: int
     candidate_name: str
     file_name: str
+    profession: str
 
 
 class CandidateDetail(BaseModel):
@@ -76,6 +77,7 @@ async def get_candidates():
                 candidate_id=id,
                 candidate_name=info.get("candidate_name", "unknown"),
                 file_name=info.get("file_name", "unknown"),
+                profession=info.get("profession", "unknown"),
             )
             for id, info in data.items()
         ]

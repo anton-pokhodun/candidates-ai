@@ -5,11 +5,12 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document, BaseNode
 from dotenv import load_dotenv
-from typing import Dict, List
+from llama_index.core.llms import ChatMessage
+from typing import Dict, List, Tuple
 import chromadb
 import random
 
-from db_utils import get_chroma_client, get_embedding_model, reset_collection
+from db_utils import get_chroma_client, get_embedding_model, reset_collection, get_llm
 from config import COLLECTION_NAME, DATA_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
 load_dotenv()
@@ -97,6 +98,53 @@ FAMOUS_NAMES = [
 
 
 # ============================================================================
+# Document Loading & Profession Extraction
+# ============================================================================
+def extract_profession_with_llm(text: str) -> str:
+    """Extract profession from CV text using LLM.
+
+    Args:
+        text: Full text of the CV
+
+    Returns:
+        Extracted profession or "Not Specified"
+    """
+    llm = get_llm()
+
+    # Take first ~2000 chars to focus on the header/summary section
+    cv_excerpt = text[:2000]
+
+    prompt = f"""Extract the candidate's current profession or job title from this CV excerpt.
+Return ONLY the job title/profession, nothing else. If unclear, return "Not Specified".
+
+Examples of good responses:
+- Software Engineer
+- Senior Product Manager
+- Data Scientist
+- Full Stack Developer
+- UX Designer
+
+CV excerpt:
+{cv_excerpt}
+
+Profession:"""
+
+    try:
+        messages = [ChatMessage(role="user", content=prompt)]
+        response = llm.chat(messages)
+        profession = response.message.content.strip()
+
+        # Basic validation
+        if len(profession) > 100 or not profession:
+            return "Not Specified"
+
+        return profession
+    except Exception as e:
+        print(f"Error extracting profession with LLM: {e}")
+        return "Not Specified"
+
+
+# ============================================================================
 # Document Loading
 # ============================================================================
 def load_documents(data_dir: str) -> List[Document]:
@@ -143,40 +191,80 @@ def create_chunks(documents: List[Document]) -> List[BaseNode]:
 # Metadata Assignment
 # ============================================================================
 def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) -> None:
-    """Assign anonymized candidate names and IDs to documents and nodes.
+    """Assign anonymized candidate names, IDs, and professions to documents and nodes.
 
-    Modifies nodes in-place to add candidate_name and candidate_id metadata.
+    Modifies nodes in-place to add candidate_name, candidate_id, and profession metadata.
 
     Args:
         documents: List of original documents
         nodes: List of chunks/nodes to add metadata to
     """
-    # Shuffle and assign unique famous names to documents
-    random.shuffle(FAMOUS_NAMES)
+    # Create a shuffled copy of famous names to avoid modifying global list
+    shuffled_names = FAMOUS_NAMES.copy()
+    random.shuffle(shuffled_names)
+
+    # Ensure we have enough names for all unique files
+    unique_files = list(
+        {doc.metadata.get("file_path", doc.doc_id) for doc in documents}
+    )
+    if len(unique_files) > len(shuffled_names):
+        print(
+            f"Warning: {len(unique_files)} unique files but only {len(shuffled_names)} names. Reusing names."
+        )
+        # Extend the list by repeating it
+        times_to_repeat = (len(unique_files) // len(shuffled_names)) + 1
+        shuffled_names = shuffled_names * times_to_repeat
+
+    # Map file_path to candidate info (to handle multiple documents from same file)
+    file_to_candidate: Dict[str, Tuple[str, int, str]] = {}
     candidate_ids: Dict[str, int] = {}
     candidate_names: Dict[str, str] = {}
+    candidate_professions: Dict[str, str] = {}
 
     for idx, doc in enumerate(documents):
-        file_name = doc.metadata.get("file_name", "unknown")
+        file_path = doc.metadata.get("file_path", doc.doc_id)
 
-        candidate_ids[doc.doc_id] = random.randint(1000, 9999)
-        # Assign from shuffled famous names list
-        assigned_name = FAMOUS_NAMES[idx % len(FAMOUS_NAMES)]
+        # Check if we've already assigned a candidate to this file
+        if file_path not in file_to_candidate:
+            assigned_name = shuffled_names[len(file_to_candidate)]
+            assigned_id = random.randint(1000, 9999)
+
+            # Extract profession using LLM
+            print(
+                f"Extracting profession from {doc.metadata.get('file_name', 'unknown')}..."
+            )
+            assigned_profession = extract_profession_with_llm(doc.get_content())
+
+            file_to_candidate[file_path] = (
+                assigned_name,
+                assigned_id,
+                assigned_profession,
+            )
+
+            original_file_name = doc.metadata.get("file_name", "unknown")
+            print(
+                f"Assigned '{assigned_name}' (ID: {assigned_id}, {assigned_profession}) to {original_file_name}"
+            )
+
+        # Use the assigned candidate info for this file
+        assigned_name, assigned_id, assigned_profession = file_to_candidate[file_path]
+        candidate_ids[doc.doc_id] = assigned_id
         candidate_names[doc.doc_id] = assigned_name
-        print(f"Assigned name '{assigned_name}' to {file_name}")
+        candidate_professions[doc.doc_id] = assigned_profession
 
     # Add metadata to each node
     for node in nodes:
-        if not node.metadata.get("file_name"):
-            node.metadata["file_name"] = "unknown"
-
         ref_doc_id = node.ref_doc_id
         if ref_doc_id is not None:
             node.metadata["candidate_name"] = candidate_names.get(ref_doc_id, "Unknown")
             node.metadata["candidate_id"] = candidate_ids.get(ref_doc_id, 0)
+            node.metadata["profession"] = candidate_professions.get(
+                ref_doc_id, "Not Specified"
+            )
         else:
             node.metadata["candidate_name"] = "Unknown"
             node.metadata["candidate_id"] = 0
+            node.metadata["profession"] = "Not Specified"
 
     if nodes:
         print(f"\nSample chunk metadata: {nodes[0].metadata}")

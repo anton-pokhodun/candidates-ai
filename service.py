@@ -23,6 +23,7 @@ def get_all_candidates() -> Dict[int, Dict[str, Any]]:
             - candidate_id: Unique identifier
             - candidate_name: Full name
             - file_name: Source file name
+            - profession: Job title/profession
     """
     chroma_client = get_chroma_client()
     collection = chroma_client.get_collection(name=COLLECTION_NAME)
@@ -39,6 +40,7 @@ def get_all_candidates() -> Dict[int, Dict[str, Any]]:
             "candidate_id": candidate_id,
             "candidate_name": metadata.get("candidate_name"),
             "file_name": metadata.get("file_name", "unknown"),
+            "profession": metadata.get("profession", "Not Specified"),
         }
 
     return candidates

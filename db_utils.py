@@ -5,6 +5,7 @@ from chromadb.api import ClientAPI
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import VectorStoreIndex
+from llama_index.llms.openai import OpenAI
 
 from config import CHROMA_DB_PATH, COLLECTION_NAME, EMBEDDING_MODEL
 
@@ -64,3 +65,12 @@ def get_vector_index(collection_name: str = COLLECTION_NAME) -> VectorStoreIndex
     return VectorStoreIndex.from_vector_store(
         vector_store=vector_store, embed_model=embed_model
     )
+
+
+def get_llm() -> OpenAI:
+    """Get configured OpenAI LLM.
+
+    Returns:
+        OpenAI LLM instance
+    """
+    return OpenAI(model="gpt-4o-mini", temperature=0)
