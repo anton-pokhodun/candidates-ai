@@ -13,7 +13,6 @@ from tools import (
     search_candidates,
     search_wikipedia,
     create_superhero,
-    search_candidates_structured,
 )
 
 load_dotenv()
@@ -33,7 +32,7 @@ def create_agent() -> ReActAgent:
             name="search_candidates",
             description=(
                 "Search for candidates using natural language queries. "
-                "Use this to find candidates with specific skills, experience, or qualifications."
+                "Use this to find candidates with specific skills, experience, or qualifications. If there are no candidates found, respond with 'No candidates found matching your query. Do not mention not relevan candidates"
             ),
         ),
         FunctionTool.from_defaults(

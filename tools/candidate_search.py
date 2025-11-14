@@ -1,12 +1,10 @@
 """Candidate search tools for the agent."""
 
 from typing import Optional
-from db_utils import get_vector_index, get_chroma_client
-from llama_index.embeddings.openai import OpenAIEmbedding
-from config import COLLECTION_NAME
+from db_utils import get_vector_index
 
 
-def search_candidates(query: str, top_k: int = 3) -> str:
+def search_candidates(query: str, top_k: int = 50) -> str:
     """Search for candidates based on a natural language query.
 
     Args:

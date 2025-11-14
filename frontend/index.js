@@ -316,8 +316,8 @@ async function performAISearch() {
 
 function clearFilter() {
   renderCandidatesList(allCandidates);
-  getElement('aiSearchResults').innerHTML = '<p class="placeholder-text">Enter a search query to find candidates using AI</p>';
-  getElement('aiSearchInput').value = '';
+  getElement('aiSearchInput').innerHTML = '<p class="placeholder-text">Ask about candidates (e.g., "Find software engineers with Python experience", "Search Wikipedia for React", "Create a superhero based on candidate skills")</p>';
+  // getElement('aiSearchInput').value = '';
 }
 
 // ===== Panel Management =====
