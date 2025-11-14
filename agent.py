@@ -171,6 +171,158 @@ def search_candidates_structured(query: str, top_k: Optional[int] = 10) -> dict:
 
 
 # ============================================================================
+# Tool 3: Super Hero Creator Tool
+# ============================================================================
+def create_superhero(candidate_names: str) -> str:
+    """Create a superhero candidate by combining skills from 2-3 candidates.
+
+    This tool takes candidate names and creates a "superhero" candidate
+    that combines the best skills and qualifications from all of them.
+    The superhero's name consists of the first name of the first candidate,
+    a superhero-style middle name, and the last name of the second candidate.
+
+    Args:
+        candidate_names: Comma-separated candidate names (e.g., "John Doe,Jane Smith" or "John Doe,Jane Smith,Bob Johnson")
+
+    Returns:
+        A formatted string describing the superhero candidate with combined skills
+    """
+    try:
+        # Parse candidate names
+        names = [name.strip() for name in candidate_names.split(",")]
+
+        if len(names) < 2 or len(names) > 3:
+            return "Error: Please provide 2 or 3 candidate names separated by commas."
+
+        # Initialize ChromaDB
+        chroma_client = get_chroma_client()
+        collection = chroma_client.get_collection(name=COLLECTION_NAME)
+
+        # Retrieve candidate information
+        candidates_data = []
+        for candidate_name in names:
+            # Query by candidate_name metadata
+            results = collection.get(
+                where={"candidate_name": candidate_name},
+                include=["documents", "metadatas"],
+            )
+
+            if not results["documents"]:
+                return f"Error: Candidate with name '{candidate_name}' not found."
+
+            # Limit content length per candidate to prevent excessive token usage
+            full_content = " ".join(results["documents"])
+            max_chars_per_candidate = 3000
+            truncated_content = full_content[:max_chars_per_candidate]
+            if len(full_content) > max_chars_per_candidate:
+                truncated_content += "... [truncated]"
+
+            candidates_data.append(
+                {
+                    "name": candidate_name,
+                    "content": truncated_content,
+                }
+            )
+
+        # Create superhero name (first name of first + superhero middle name + last name of second)
+        first_candidate_name = candidates_data[0]["name"].split()
+        second_candidate_name = candidates_data[1]["name"].split()
+
+        first_name = first_candidate_name[0] if first_candidate_name else "Super"
+        last_name = (
+            second_candidate_name[-1]
+            if len(second_candidate_name) > 1
+            else second_candidate_name[0]
+            if second_candidate_name
+            else "Hero"
+        )
+
+        # Generate a superhero middle name
+        import random
+
+        superhero_middle_names = [
+            "Dragon",
+            "Beast",
+            "Rock",
+            "Thunder",
+            "Storm",
+            "Steel",
+            "Phoenix",
+            "Titan",
+            "Viper",
+            "Shadow",
+            "Blaze",
+            "Frost",
+            "Venom",
+            "Raven",
+            "Wolf",
+            "Hawk",
+            "Cobra",
+            "Tiger",
+        ]
+        middle_name = random.choice(superhero_middle_names)
+
+        superhero_name = f"{first_name} '{middle_name}' {last_name}"
+
+        # Use LLM to extract and combine skills
+        llm = OpenAI(
+            model=LLM_MODEL,
+            temperature=0.3,
+            max_tokens=1000,  # Limit response length
+            timeout=30.0,  # 30 second timeout
+        )
+
+        # Prepare prompt for skill extraction and combination
+        candidates_info = "\n\n".join(
+            [
+                f"Candidate {i + 1} ({data['name']}):\n{data['content']}"
+                for i, data in enumerate(candidates_data)
+            ]
+        )
+
+        prompt = f"""You are creating a "superhero" candidate by combining the best skills and qualifications from multiple candidates.
+
+Here are the candidates:
+
+{candidates_info}
+
+Task:
+1. Extract the key skills, technologies, experiences, and qualifications from each candidate
+2. Combine them into one comprehensive profile highlighting the BEST and most impressive aspects from each
+3. Remove duplicates and organize by category (Technical Skills, Experience, Education, etc.)
+4. Make it read like a powerful, combined resume profile
+5. Keep the response concise and under 800 words
+
+Superhero Name: {superhero_name}
+
+Create a compelling superhero candidate profile:"""
+
+        response = llm.complete(prompt)
+
+        # Format the final output
+        result = f"""
+🦸 SUPERHERO CANDIDATE CREATED! 🦸
+
+Name: {superhero_name}
+Combined from: {len(candidates_data)} candidates
+- {", ".join([data["name"] for data in candidates_data])}
+
+{"-" * 80}
+
+{response.text}
+
+{"-" * 80}
+
+This superhero candidate combines the best qualities from all {len(candidates_data)} candidates!
+"""
+
+        return result
+
+    except Exception as e:
+        return f"Error creating superhero: {str(e)}"
+
+
+# ============================================================================
 # Agent Setup
 # ============================================================================
 def create_agent() -> ReActAgent:
@@ -189,6 +341,11 @@ def create_agent() -> ReActAgent:
             fn=search_wikipedia,
             name="search_wikipedia",
             description="Search Wikipedia for general knowledge, facts, and information about topics, concepts, people, places, or events. Use this for questions unrelated to candidate resumes.",
+        ),
+        FunctionTool.from_defaults(
+            fn=create_superhero,
+            name="create_superhero",
+            description="Create a superhero candidate by combining the best skills from 2-3 candidates. Provide comma-separated candidate IDs (e.g., '123,456' or '123,456,789'). The superhero's name will be the first name of the first candidate and last name of the second candidate.",
         ),
     ]
 
