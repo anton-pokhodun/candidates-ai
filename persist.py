@@ -1,27 +1,23 @@
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
-from llama_index.embeddings.openai import OpenAIEmbedding
+"""Script to build and persist the vector index from documents."""
+
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core import StorageContext
 from llama_index.core.schema import Document, BaseNode
 from dotenv import load_dotenv
 from typing import Dict, List
 import chromadb
-from chromadb.api import ClientAPI
 import random
+
+from db_utils import get_chroma_client, get_embedding_model, reset_collection
+from config import COLLECTION_NAME, DATA_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
 load_dotenv()
 
-# ============================================================================
-# Configuration
-# ============================================================================
-COLLECTION_NAME = "csv"
-CHROMA_DB_PATH = "./chroma_db"
-DATA_DIR = "./data"
-CHUNK_SIZE = 1024
-CHUNK_OVERLAP = 200
 
-# Famous people names list for anonymization
+# ============================================================================
+# Famous Names for Anonymization
+# ============================================================================
 FAMOUS_NAMES = [
     "Albert Einstein",
     "Marie Curie",
@@ -101,42 +97,6 @@ FAMOUS_NAMES = [
 
 
 # ============================================================================
-# Database Client
-# ============================================================================
-def get_chroma_client() -> ClientAPI:
-    """Get or create a persistent ChromaDB client.
-
-    Returns:
-        chromadb.ClientAPI: Initialized ChromaDB client
-    """
-    return chromadb.PersistentClient(path=CHROMA_DB_PATH)
-
-
-# ============================================================================
-# Collection Management
-# ============================================================================
-def reset_collection(client: ClientAPI, collection_name: str) -> chromadb.Collection:
-    """Delete existing collection and create a new one.
-
-    Args:
-        client: ChromaDB client instance
-        collection_name: Name of the collection to reset
-
-    Returns:
-        chromadb.Collection: Newly created collection
-    """
-    try:
-        client.delete_collection(name=collection_name)
-        print(f"Deleted existing collection '{collection_name}'")
-    except Exception:
-        print(f"No existing collection '{collection_name}' to delete")
-
-    collection = client.get_or_create_collection(name=collection_name)
-    print(f"Created new collection '{collection_name}'")
-    return collection
-
-
-# ============================================================================
 # Document Loading
 # ============================================================================
 def load_documents(data_dir: str) -> List[Document]:
@@ -166,8 +126,6 @@ def create_chunks(documents: List[Document]) -> List[BaseNode]:
     Returns:
         List of TextNode chunks
     """
-    # Chunk size: 512-1024 tokens works well for CV sections (experience, skills, education)
-    # Larger overlap ensures continuity between chunks
     node_parser = SentenceSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
@@ -240,15 +198,17 @@ def create_and_persist_index(
     Returns:
         VectorStoreIndex: Created index
     """
-    embedding = OpenAIEmbedding()
-    vector_store = ChromaVectorStore(chroma_collection=collection, embedding=embedding)
+    embed_model = get_embedding_model()
+    vector_store = ChromaVectorStore(
+        chroma_collection=collection, embedding=embed_model
+    )
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
     print("Building index and persisting to ChromaDB...")
     index = VectorStoreIndex(
         nodes=nodes,
         storage_context=storage_context,
-        embed_model=embedding,
+        embed_model=embed_model,
         show_progress=True,
     )
     print("Index created and persisted successfully!")
@@ -279,7 +239,7 @@ def main() -> None:
     print(f"Total documents indexed: {len(documents)}")
     print(f"Total chunks created: {len(nodes)}")
     print(f"Collection name: {COLLECTION_NAME}")
-    print(f"Database path: {CHROMA_DB_PATH}")
+    print(f"Data directory: {DATA_DIR}")
     print(f"{'=' * 60}")
 
 
