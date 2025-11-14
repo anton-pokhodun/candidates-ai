@@ -2,6 +2,9 @@
 
 An AI-powered candidate management system that allows you to search, filter, and analyze candidate CVs using natural language queries and intelligent agents.
 
+https://github.com/user-attachments/assets/5113451b-cc40-4894-964d-ef4cbda0700c
+https://github.com/user-attachments/assets/71a6e150-f017-4f1d-9bab-5c42a42a887d
+
 ## Features
 
 - **Candidate Management**: Browse and search through candidate profiles
