@@ -1,26 +1,15 @@
-from chromadb.api import ClientAPI
-from dotenv import load_dotenv
-import chromadb
-from llama_index.llms.openai import OpenAI
+"""Service layer for candidate retrieval and summary generation."""
+
 from typing import Dict, Optional, Generator, Any
 import json
+from dotenv import load_dotenv
+
+from llama_index.llms.openai import OpenAI
+
+from db_utils import get_chroma_client
+from config import COLLECTION_NAME, LLM_MODEL
 
 load_dotenv()
-
-COLLECTION_NAME = "csv"
-CHROMA_DB_PATH = "./chroma_db"
-
-
-# ============================================================================
-# Database Client
-# ============================================================================
-def get_chroma_client() -> ClientAPI:
-    """Get or create a persistent ChromaDB client.
-
-    Returns:
-        chromadb.PersistentClient: Initialized ChromaDB client
-    """
-    return chromadb.PersistentClient(path=CHROMA_DB_PATH)
 
 
 # ============================================================================
@@ -66,6 +55,9 @@ def get_candidate_by_id(candidate_id: str) -> Optional[Dict[str, Any]]:
             - candidate_id: Unique identifier
             - candidate_name: Full name
             - file_name: Source file name
+            - chunks_count: Number of text chunks
+            - full_text: Combined text from all chunks
+            - chunks: List of individual text chunks
         Returns None if candidate not found
     """
     chroma_client = get_chroma_client()
@@ -109,35 +101,6 @@ def get_candidate_by_id(candidate_id: str) -> Optional[Dict[str, Any]]:
 # ============================================================================
 # Summary Generation
 # ============================================================================
-def _build_summary_prompt(cv_text: str) -> str:
-    """Build the prompt for CV summary generation.
-
-    Args:
-        cv_text: Complete CV text
-
-    Returns:
-        Formatted prompt string
-    """
-    return f"""Based on the following CV information, create a well-structured professional summary.
-
-CV Content:
-{cv_text}
-
-Please provide a comprehensive summary with the following sections:
-1. **Current Position**: Current or most recent job title and company
-2. **Professional Summary**: A brief 2-3 sentence overview of their career
-3. **Years of Experience**: Calculate total years of professional experience based on employment dates
-4. **Key Skills**: List all technical skills, tools, frameworks, and technologies (organized by category if applicable)
-5. **Work Experience**: Summarize each position with company name, role, dates, and key responsibilities/achievements
-6. **Education**: Degrees, institutions, and graduation years
-7. **Certifications**: Any professional certifications or additional training
-8. **Notable Achievements**: Key accomplishments or projects worth highlighting
-
-Format the response in a clear, professional manner using markdown. Be concise but thorough.
-If any information is not available in the CV, indicate "Not specified" for that section.
-"""
-
-
 def generate_candidate_summary_stream(candidate_id: str) -> Generator[str, None, None]:
     """Generate a streaming Server-Sent Events response for candidate summary.
 
@@ -166,7 +129,7 @@ def generate_candidate_summary_stream(candidate_id: str) -> Generator[str, None,
     yield f"data: {json.dumps({'type': 'metadata', 'data': metadata})}\n\n"
 
     # Initialize LLM and generate summary
-    llm = OpenAI(model="gpt-4o-mini", temperature=0.2)
+    llm = OpenAI(model=LLM_MODEL, temperature=0.2)
     prompt = _build_summary_prompt(candidate_data["full_text"])
 
     # Stream the LLM response
@@ -176,3 +139,32 @@ def generate_candidate_summary_stream(candidate_id: str) -> Generator[str, None,
             yield f"data: {json.dumps({'type': 'content', 'data': chunk.delta})}\n\n"
 
     yield 'data: {"type": "done"}\n\n'
+
+
+def _build_summary_prompt(cv_text: str) -> str:
+    """Build the prompt for CV summary generation.
+
+    Args:
+        cv_text: Complete CV text
+
+    Returns:
+        Formatted prompt string
+    """
+    return f"""Based on the following CV information, create a well-structured professional summary.
+
+CV Content:
+{cv_text}
+
+Please provide a comprehensive summary with the following sections:
+1. **Current Position**: Current or most recent job title and company
+2. **Professional Summary**: A brief 2-3 sentence overview of their career
+3. **Years of Experience**: Calculate total years of professional experience based on employment dates
+4. **Key Skills**: List all technical skills, tools, frameworks, and technologies (organized by category if applicable)
+5. **Work Experience**: Summarize each position with company name, role, dates, and key responsibilities/achievements
+6. **Education**: Degrees, institutions, and graduation years
+7. **Certifications**: Any professional certifications or additional training
+8. **Notable Achievements**: Key accomplishments or projects worth highlighting
+
+Format the response in a clear, professional manner using markdown. Be concise but thorough.
+If any information is not available in the CV, indicate "Not specified" for that section.
+"""
