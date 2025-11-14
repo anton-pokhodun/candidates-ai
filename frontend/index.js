@@ -345,7 +345,9 @@ function initializeSearchBox() {
   getElement('searchBox').addEventListener('input', (e) => {
     const searchTerm = e.target.value.toLowerCase();
     const filtered = allCandidates.filter(candidate =>
-      candidate.candidate_name.toLowerCase().includes(searchTerm)
+      // ===== Event Handlers =====
+      candidate.candidate_name.toLowerCase().includes(searchTerm) ||
+      candidate.profession.toLowerCase().includes(searchTerm)
     );
     renderCandidatesList(filtered);
   });
