@@ -45,7 +45,7 @@ def search_candidates_structured(query: str, top_k: Optional[int] = 10) -> dict:
             "candidate_id": str(result.node.metadata.get("candidate_id", "N/A")),
             "candidate_name": result.node.metadata.get("candidate_name", "Unknown"),
             "file_name": result.node.metadata.get("file_name", "unknown"),
-            "score": float(result.score),
+            "score": float(result.score) if result.score is not None else 0.0,
             "content": result.node.get_content(),
         }
         for result in results
