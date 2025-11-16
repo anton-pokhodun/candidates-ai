@@ -7,7 +7,6 @@ from llama_index.llms.openai import OpenAI
 from llama_index.core.agent.workflow import ReActAgent, AgentStream
 from llama_index.core.workflow import Context
 from llama_index.core.tools import FunctionTool
-
 from config import LLM_MODEL
 from tools import (
     search_candidates,
@@ -55,7 +54,9 @@ def create_agent() -> ReActAgent:
         ),
     ]
 
-    return ReActAgent(tools=tools, llm=llm, verbose=True)
+    return ReActAgent(
+        tools=tools, llm=llm, verbose=False, max_iterations=5, stop=["\nObservation:"]
+    )
 
 
 async def search_with_agent(query: str, top_k: int = 10):
@@ -70,8 +71,6 @@ async def search_with_agent(query: str, top_k: int = 10):
     """
     agent = create_agent()
     ctx = Context(agent)
-
-    print(f"Processing query: {query}")
 
     # Get structured results (not currently used but available)
     # structured_results = search_candidates_structured(query, top_k)
