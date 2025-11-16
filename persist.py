@@ -1,24 +1,25 @@
-"""Script to build and persist the vector index from documents."""
+"""Simplified and verified index builder."""
+
+from typing import List, Dict, Tuple
+import random
+from dotenv import load_dotenv
+import chromadb
+import re
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document, BaseNode
-from dotenv import load_dotenv
 from llama_index.core.llms import ChatMessage
-from typing import Dict, List, Tuple
-import chromadb
-import random
 
 from db_utils import get_chroma_client, get_embedding_model, reset_collection, get_llm
 from config import COLLECTION_NAME, DATA_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
 load_dotenv()
 
-
-# ============================================================================
-# Famous Names for Anonymization
-# ============================================================================
+# =====================================================================
+# ANONYMIZED NAMES
+# =====================================================================
 FAMOUS_NAMES = [
     "Albert Einstein",
     "Marie Curie",
@@ -97,238 +98,174 @@ FAMOUS_NAMES = [
 ]
 
 
-# ============================================================================
-# Document Loading & Profession Extraction
-# ============================================================================
-def extract_profession_with_llm(text: str) -> str:
-    """Extract profession from CV text using LLM.
-
-    Args:
-        text: Full text of the CV
-
-    Returns:
-        Extracted profession or "Not Specified"
+def extract_profession(text: str, llm_fallback=True) -> str:
     """
-    llm = get_llm()
+    Extract the candidate's profession from a CV using a combined approach:
+    1. Rule-based extraction from common headers/keywords.
+    2. Optional LLM fallback if profession cannot be determined.
+    """
 
-    # Take first ~2000 chars to focus on the header/summary section
-    cv_excerpt = text[:2000]
+    # ------------------------------
+    # 1️⃣ Rule-based extraction
+    # ------------------------------
+    patterns = [
+        r"(?i)current position[:\-]\s*(.*)",
+        r"(?i)profession[:\-]\s*(.*)",
+        r"(?i)job title[:\-]\s*(.*)",
+        r"(?i)role[:\-]\s*(.*)",
+        r"(?i)^title[:\-]\s*(.*)",  # line starts with Title
+    ]
 
-    prompt = f"""Extract the candidate's current profession or job title from this CV excerpt.
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            prof = match.group(1).strip()
+            # simple validation
+            if prof and len(prof) <= 100:
+                print(f"Extracted profession using rule-based method: {prof}")
+                return prof
+
+    # Optional: look for common CV starting lines (heuristic)
+    first_line = text.strip().split("\n")[0]
+    if 2 <= len(first_line.split()) <= 6:  # likely a title line
+        return first_line.strip()[:100]
+
+    # ------------------------------
+    # 2️⃣ LLM fallback
+    # ------------------------------
+    if llm_fallback:
+        try:
+            llm = get_llm()
+            cv_excerpt = text[:2000]  # focus on first part of CV
+            prompt = f"""
+Extract the candidate's current profession or job title from this CV excerpt.
 Return ONLY the job title/profession, nothing else. If unclear, return "Not Specified".
-
-Examples of good responses:
-- Software Engineer
-- Senior Product Manager
-- Data Scientist
-- Full Stack Developer
-- UX Designer
 
 CV excerpt:
 {cv_excerpt}
 
-Profession:"""
+Profession:
+"""
+            messages = [ChatMessage(role="user", content=prompt)]
+            response = llm.chat(messages)
+            profession = response.message.content.strip()
+            if profession and len(profession) <= 100:
+                return profession
+        except Exception as e:
+            print(f"LLM fallback failed: {e}")
 
-    try:
-        messages = [ChatMessage(role="user", content=prompt)]
-        response = llm.chat(messages)
-        profession = response.message.content.strip()
-
-        # Basic validation
-        if len(profession) > 100 or not profession:
-            return "Not Specified"
-
-        return profession
-    except Exception as e:
-        print(f"Error extracting profession with LLM: {e}")
-        return "Not Specified"
+    # ------------------------------
+    # Default if nothing found
+    # ------------------------------
+    return "Not Specified"
 
 
-# ============================================================================
-# Document Loading
-# ============================================================================
+# =====================================================================
+# Load documents
+# =====================================================================
 def load_documents(data_dir: str) -> List[Document]:
-    """Load documents from the specified directory.
-
-    Args:
-        data_dir: Path to directory containing documents
-
-    Returns:
-        List of Document objects
-    """
     print(f"Loading documents from {data_dir}...")
-    documents = SimpleDirectoryReader(data_dir).load_data()
-    print(f"Loaded {len(documents)} documents")
-    return documents
+    return SimpleDirectoryReader(data_dir).load_data()
 
 
-# ============================================================================
-# Document Chunking
-# ============================================================================
+# =====================================================================
+# Chunk documents
+# =====================================================================
 def create_chunks(documents: List[Document]) -> List[BaseNode]:
-    """Parse documents into chunks/nodes.
-
-    Args:
-        documents: List of documents to chunk
-
-    Returns:
-        List of TextNode chunks
-    """
-    node_parser = SentenceSplitter(
+    splitter = SentenceSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
         separator=" ",
         paragraph_separator="\n\n",
     )
-
-    print("Creating chunks...")
-    nodes = node_parser.get_nodes_from_documents(documents)
-    print(f"Created {len(nodes)} chunks")
-    return nodes
+    print("Chunking documents...")
+    return splitter.get_nodes_from_documents(documents)
 
 
-# ============================================================================
-# Metadata Assignment
-# ============================================================================
+# =====================================================================
+# Assign metadata (critical fix)
+# =====================================================================
 def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) -> None:
-    """Assign anonymized candidate names, IDs, and professions to documents and nodes.
-
-    Modifies nodes in-place to add candidate_name, candidate_id, and profession metadata.
-
-    Args:
-        documents: List of original documents
-        nodes: List of chunks/nodes to add metadata to
     """
-    # Create a shuffled copy of famous names to avoid modifying global list
-    shuffled_names = FAMOUS_NAMES.copy()
-    random.shuffle(shuffled_names)
+    Ensures:
+    - Every file becomes exactly 1 candidate.
+    - ALL nodes referencing that file get metadata: candidate_id, candidate_name, profession.
+    - No missing metadata ever.
+    """
 
-    # Ensure we have enough names for all unique files
+    print("Assigning candidate metadata...")
+
+    famous = FAMOUS_NAMES.copy()
+    random.shuffle(famous)
+
+    # Map file paths → candidate info
+    file_to_candidate: Dict[str, Tuple[str, int, str]] = {}
+
     unique_files = list(
         {doc.metadata.get("file_path", doc.doc_id) for doc in documents}
     )
-    if len(unique_files) > len(shuffled_names):
-        print(
-            f"Warning: {len(unique_files)} unique files but only {len(shuffled_names)} names. Reusing names."
-        )
-        # Extend the list by repeating it
-        times_to_repeat = (len(unique_files) // len(shuffled_names)) + 1
-        shuffled_names = shuffled_names * times_to_repeat
 
-    # Map file_path to candidate info (to handle multiple documents from same file)
-    file_to_candidate: Dict[str, Tuple[str, int, str]] = {}
-    candidate_ids: Dict[str, int] = {}
-    candidate_names: Dict[str, str] = {}
-    candidate_professions: Dict[str, str] = {}
+    if len(unique_files) > len(famous):
+        repeat = (len(unique_files) // len(famous)) + 1
+        famous = famous * repeat
 
-    for idx, doc in enumerate(documents):
+    # Assign one candidate per unique file
+    for i, doc in enumerate(documents):
         file_path = doc.metadata.get("file_path", doc.doc_id)
 
-        # Check if we've already assigned a candidate to this file
         if file_path not in file_to_candidate:
-            assigned_name = shuffled_names[len(file_to_candidate)]
-            assigned_id = random.randint(1000, 9999)
+            name = famous[len(file_to_candidate)]
+            cid = random.randint(1000, 9999)
+            profession = extract_profession(doc.get_content())
 
-            # Extract profession using LLM
-            print(
-                f"Extracting profession from {doc.metadata.get('file_name', 'unknown')}..."
-            )
-            assigned_profession = extract_profession_with_llm(doc.get_content())
+            file_to_candidate[file_path] = (name, cid, profession)
 
-            file_to_candidate[file_path] = (
-                assigned_name,
-                assigned_id,
-                assigned_profession,
-            )
-
-            original_file_name = doc.metadata.get("file_name", "unknown")
-            print(
-                f"Assigned '{assigned_name}' (ID: {assigned_id}, {assigned_profession}) to {original_file_name}"
-            )
-
-        # Use the assigned candidate info for this file
-        assigned_name, assigned_id, assigned_profession = file_to_candidate[file_path]
-        candidate_ids[doc.doc_id] = assigned_id
-        candidate_names[doc.doc_id] = assigned_name
-        candidate_professions[doc.doc_id] = assigned_profession
-
-    # Add metadata to each node
+    # Apply metadata to EVERY chunk
     for node in nodes:
-        ref_doc_id = node.ref_doc_id
-        if ref_doc_id is not None:
-            node.metadata["candidate_name"] = candidate_names.get(ref_doc_id, "Unknown")
-            node.metadata["candidate_id"] = candidate_ids.get(ref_doc_id, 0)
-            node.metadata["profession"] = candidate_professions.get(
-                ref_doc_id, "Not Specified"
-            )
-        else:
-            node.metadata["candidate_name"] = "Unknown"
-            node.metadata["candidate_id"] = 0
-            node.metadata["profession"] = "Not Specified"
+        file_path = node.metadata.get("file_path") or node.ref_doc_id
+        name, cid, profession = file_to_candidate[file_path]
 
-    if nodes:
-        print(f"\nSample chunk metadata: {nodes[0].metadata}")
-        print(f"Sample chunk text (first 200 chars): {nodes[0].get_content()[:200]}...")
+        node.metadata["candidate_name"] = name
+        node.metadata["candidate_id"] = cid
+        node.metadata["profession"] = profession.lower()
+        node.metadata.setdefault("file_name", file_path)
+        node.set_content(node.get_content().strip())
+
+    print(f"Example chunk metadata:\n{nodes[0].metadata}")
 
 
-# ============================================================================
-# Index Creation
-# ============================================================================
-def create_and_persist_index(
-    nodes: List[BaseNode], collection: chromadb.Collection
-) -> VectorStoreIndex:
-    """Create vector store index and persist to ChromaDB.
-
-    Args:
-        nodes: List of chunks/nodes to index
-        collection: ChromaDB collection to store vectors
-
-    Returns:
-        VectorStoreIndex: Created index
-    """
+# =====================================================================
+# Build & persist index
+# =====================================================================
+def create_and_persist_index(nodes: List[BaseNode], collection: chromadb.Collection):
     embed_model = get_embedding_model()
     vector_store = ChromaVectorStore(
         chroma_collection=collection, embedding=embed_model
     )
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    ctx = StorageContext.from_defaults(vector_store=vector_store)
 
-    print("Building index and persisting to ChromaDB...")
-    index = VectorStoreIndex(
-        nodes=nodes,
-        storage_context=storage_context,
-        embed_model=embed_model,
-        show_progress=True,
-    )
-    print("Index created and persisted successfully!")
+    print("Creating vector index...")
+    index = VectorStoreIndex(nodes=nodes, storage_context=ctx, embed_model=embed_model)
+    print("Index successfully saved.")
     return index
 
 
-# ============================================================================
-# Main Execution
-# ============================================================================
-def main() -> None:
-    """Main execution function to build and persist the vector index."""
-    # Initialize ChromaDB client and reset collection
-    chroma_client = get_chroma_client()
-    collection = reset_collection(chroma_client, COLLECTION_NAME)
+# =====================================================================
+# MAIN
+# =====================================================================
+def main():
+    client = get_chroma_client()
+    collection = reset_collection(client, COLLECTION_NAME)
 
-    # Load and process documents
-    documents = load_documents(DATA_DIR)
-    nodes = create_chunks(documents)
-    assign_candidate_metadata(documents, nodes)
-
-    # Create and persist index
+    docs = load_documents(DATA_DIR)
+    nodes = create_chunks(docs)
+    assign_candidate_metadata(docs, nodes)
     index = create_and_persist_index(nodes, collection)
 
-    # Print summary
-    print(f"\n{'=' * 60}")
-    print("Index Creation Summary")
-    print(f"{'=' * 60}")
-    print(f"Total documents indexed: {len(documents)}")
-    print(f"Total chunks created: {len(nodes)}")
-    print(f"Collection name: {COLLECTION_NAME}")
-    print(f"Data directory: {DATA_DIR}")
-    print(f"{'=' * 60}")
+    print("\n===== Index Summary =====")
+    print(f"Documents: {len(docs)}")
+    print(f"Chunks: {len(nodes)}")
+    print(f"Collection: {COLLECTION_NAME}")
 
 
 if __name__ == "__main__":
