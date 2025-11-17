@@ -15,6 +15,8 @@ CHUNK_OVERLAP = 50
 # Embedding settings
 EMBEDDING_MODEL = "text-embedding-3-small"
 
+METADATA_FILE = "data/candidate_metadata.json"
+
 # =====================================================================
 # ANONYMIZED NAMES
 # =====================================================================

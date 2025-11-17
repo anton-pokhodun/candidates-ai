@@ -1,10 +1,12 @@
 """Simplified and verified index builder."""
 
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import random
 from dotenv import load_dotenv
 import chromadb
 import re
+import os
+import json
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
 from llama_index.vector_stores.chroma import ChromaVectorStore
@@ -13,9 +15,31 @@ from llama_index.core.schema import Document, BaseNode
 from llama_index.core.llms import ChatMessage
 
 from db_utils import get_chroma_client, get_embedding_model, reset_collection, get_llm
-from config import COLLECTION_NAME, DATA_DIR, CHUNK_SIZE, CHUNK_OVERLAP, FAMOUS_NAMES
+from config import (
+    COLLECTION_NAME,
+    DATA_DIR,
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
+    FAMOUS_NAMES,
+    METADATA_FILE,
+)
 
 load_dotenv()
+
+
+def load_existing_metadata() -> Dict[str, dict]:
+    if os.path.exists(METADATA_FILE):
+        with open(METADATA_FILE, "r") as f:
+            print(f"Loading candidate metadata from {METADATA_FILE}...")
+            return json.load(f)
+    print("No existing metadata found, starting fresh...")
+    return {}
+
+
+def save_metadata(metadata: Dict[str, dict]):
+    with open(METADATA_FILE, "w") as f:
+        print(f"Saving candidate metadata to {METADATA_FILE}...")
+        json.dump(metadata, f, indent=2)
 
 
 def extract_profession(text: str, llm_fallback=True) -> str:
@@ -68,9 +92,9 @@ Profession:
 """
             messages = [ChatMessage(role="user", content=prompt)]
             response = llm.chat(messages)
-            profession = response.message.content.strip()
+            profession = response.message.content
             if profession and len(profession) <= 100:
-                return profession
+                return profession.lower().strip()
         except Exception as e:
             print(f"LLM fallback failed: {e}")
 
@@ -114,42 +138,44 @@ def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) 
     """
 
     print("Assigning candidate metadata...")
-
-    famous = FAMOUS_NAMES.copy()
-    random.shuffle(famous)
-
-    # Map file paths → candidate info
-    file_to_candidate: Dict[str, Tuple[str, int, str]] = {}
-
-    unique_files = list(
-        {doc.metadata.get("file_path", doc.doc_id) for doc in documents}
-    )
-
-    if len(unique_files) > len(famous):
-        repeat = (len(unique_files) // len(famous)) + 1
-        famous = famous * repeat
+    # load or initialize metadata store
+    metadata_store = load_existing_metadata()
 
     # Assign one candidate per unique file
     for i, doc in enumerate(documents):
         file_path = doc.metadata.get("file_path", doc.doc_id)
 
-        if file_path not in file_to_candidate:
-            name = famous[len(file_to_candidate)]
-            cid = random.randint(1000, 9999)
-            profession = extract_profession(doc.get_content())
+        if file_path in metadata_store:
+            print(f"Metadata exists for {file_path}, loading...")
+            continue
 
-            file_to_candidate[file_path] = (name, cid, profession)
+        name = FAMOUS_NAMES[i]
+        cid = random.randint(1000, 9999)
+        profession = extract_profession(doc.get_content())
+
+        metadata_store[file_path] = {
+            "candidate_name": name,
+            "candidate_id": cid,
+            "profession": profession.lower(),
+        }
+
+    # Save updated metadata store
+    save_metadata(metadata_store)
 
     # Apply metadata to EVERY chunk
     for node in nodes:
-        file_path = node.metadata.get("file_path") or node.ref_doc_id
-        name, cid, profession = file_to_candidate[file_path]
+        file_path = node.metadata.get("file_path")
 
-        node.metadata["candidate_name"] = name
-        node.metadata["candidate_id"] = cid
-        node.metadata["profession"] = profession.lower()
-        node.metadata.setdefault("file_name", file_path)
-        node.set_content(node.get_content().strip())
+        if file_path in metadata_store:
+            node.metadata["candidate_name"] = metadata_store[file_path][
+                "candidate_name"
+            ]
+            node.metadata["candidate_id"] = metadata_store[file_path]["candidate_id"]
+            node.metadata["profession"] = metadata_store[file_path][
+                "profession"
+            ].lower()
+            node.metadata.setdefault("file_name", file_path)
+            node.set_content(node.get_content().strip())
 
     print(f"Example chunk metadata:\n{nodes[0].metadata}")
 
@@ -186,6 +212,9 @@ def main():
     print(f"Documents: {len(docs)}")
     print(f"Chunks: {len(nodes)}")
     print(f"Collection: {COLLECTION_NAME}")
+    print("\n===== Example Chunk =====")
+    print(nodes[0])
+    print(nodes[0].metadata)
 
 
 if __name__ == "__main__":
