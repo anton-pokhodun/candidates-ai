@@ -17,6 +17,13 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 
 METADATA_FILE = "data/candidate_metadata.json"
 
+COMMON_SKILLS_HEADERS = [
+    r"(?i)skills[:\-]\s*(.*)",
+    r"(?i)technical skills[:\-]\s*(.*)",
+    r"(?i)tools[:\-]\s*(.*)",
+    r"(?i)technologies[:\-]\s*(.*)",
+]
+
 # =====================================================================
 # ANONYMIZED NAMES
 # =====================================================================

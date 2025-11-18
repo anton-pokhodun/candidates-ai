@@ -2,12 +2,43 @@
 
 import chromadb
 from chromadb.api import ClientAPI
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import VectorStoreIndex
+from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
+from llama_index.vector_stores.chroma import ChromaVectorStore
+import os
+import re
+import json
+from typing import Dict
 
-from config import CHROMA_DB_PATH, COLLECTION_NAME, EMBEDDING_MODEL
+from config import CHROMA_DB_PATH, COLLECTION_NAME, EMBEDDING_MODEL, METADATA_FILE
+
+
+def load_existing_metadata() -> Dict[str, dict]:
+    if os.path.exists(METADATA_FILE):
+        with open(METADATA_FILE, "r") as f:
+            print(f"Loading candidate metadata from {METADATA_FILE}...")
+            return json.load(f)
+    print("No existing metadata found, starting fresh...")
+    return {}
+
+
+def _strip_markdown_and_noise(text: str) -> str:
+    """Remove markdown fences and leading/trailing noise."""
+    if not text:
+        return text
+    # Remove triple/back tick code fences ```json ... ```
+    text = re.sub(r"```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
+    # Remove single backticks
+    text = text.replace("`", "")
+    return text.strip()
+
+
+def save_metadata(metadata: Dict[str, dict]):
+    with open(METADATA_FILE, "w") as f:
+        print(f"Saving candidate metadata to {METADATA_FILE}...")
+        json.dump(metadata, f, indent=2)
 
 
 def get_chroma_client() -> ClientAPI:

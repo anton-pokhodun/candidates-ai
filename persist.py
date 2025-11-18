@@ -1,11 +1,10 @@
 """Simplified and verified index builder."""
 
-from typing import List, Dict
+from typing import List
 import random
 from dotenv import load_dotenv
 import chromadb
 import re
-import os
 import json
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext
@@ -14,32 +13,94 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document, BaseNode
 from llama_index.core.llms import ChatMessage
 
-from db_utils import get_chroma_client, get_embedding_model, reset_collection, get_llm
+from db_utils import (
+    get_chroma_client,
+    get_embedding_model,
+    reset_collection,
+    get_llm,
+    load_existing_metadata,
+    save_metadata,
+    _strip_markdown_and_noise,
+)
 from config import (
     COLLECTION_NAME,
     DATA_DIR,
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     FAMOUS_NAMES,
-    METADATA_FILE,
+    COMMON_SKILLS_HEADERS,
 )
 
 load_dotenv()
 
 
-def load_existing_metadata() -> Dict[str, dict]:
-    if os.path.exists(METADATA_FILE):
-        with open(METADATA_FILE, "r") as f:
-            print(f"Loading candidate metadata from {METADATA_FILE}...")
-            return json.load(f)
-    print("No existing metadata found, starting fresh...")
-    return {}
+def extract_skillset(text: str, llm_fallback=True):
+    """
+    Extract a list of skills from the CV text using simple keyword matching.
+    This is a placeholder for a more sophisticated skill extraction method.
+    """
+    SOFT_SPLIT_REGEX = r"[,;\n]"
+    best_match_start = -1
 
+    for pattern in COMMON_SKILLS_HEADERS:
+        match = re.search(pattern, text)
+        if match:
+            skills_line = match.group(1)
+            skills = re.split(SOFT_SPLIT_REGEX, skills_line)
+            skills = [skill.strip().lower() for skill in skills if skill.strip()]
+            print(f"Extracted skills using rule-based method: {skills}")
 
-def save_metadata(metadata: Dict[str, dict]):
-    with open(METADATA_FILE, "w") as f:
-        print(f"Saving candidate metadata to {METADATA_FILE}...")
-        json.dump(metadata, f, indent=2)
+            best_match_start = match.start()
+            print(f"Skills found at position: {best_match_start}")
+
+    if best_match_start != -1:
+        start_pos = max(0, best_match_start - 50)
+        end_pos = min(len(text), best_match_start + 750)
+        cv_excerpt = text[start_pos:end_pos]
+        print(f"CV excerpt for skills:\n{cv_excerpt}\n")
+    else:
+        cv_excerpt = text[:2000]
+
+    print(f"Using CV excerpt for skills extraction:\n{cv_excerpt}\n")
+    if cv_excerpt:
+        try:
+            llm = get_llm()
+            prompt = f"""
+            Extract a list of skills (e.g., technologies, programming languages, methodologies, software) from this CV excerpt.
+            Return ONLY the skills as a JSON list of strings (e.g., ["Python", "AWS", "Scrum"]). It should be a valid JSON format. If no skills found, return an empty list: [].
+            It should start with '[' and end with ']'.
+            
+            CV excerpt:
+            {cv_excerpt}
+            
+            Skills:
+            """
+            messages = [ChatMessage(role="user", content=prompt)]
+            response = llm.chat(messages)
+            print(f"LLM response for skills extraction: {response.message.content}")
+
+            content = ""
+            if response and response.message and response.message.content:
+                content = response.message.content.strip()
+                content = _strip_markdown_and_noise(content)
+
+            skills = []
+
+            if content:
+                parsed_skills = json.loads(content)
+                if isinstance(parsed_skills, list):
+                    skills = parsed_skills
+                else:
+                    skills = []
+
+            if skills:
+                skills = [skill.strip().lower() for skill in skills if skill.strip()]
+                print(f"Extracted skills using LLM fallback: {skills}")
+                return skills
+
+        except Exception as e:
+            print(f"LLM fallback for skills extraction failed: {e}")
+    return []  # default if nothing found
 
 
 def extract_profession(text: str, llm_fallback=True) -> str:
@@ -82,19 +143,21 @@ def extract_profession(text: str, llm_fallback=True) -> str:
             llm = get_llm()
             cv_excerpt = text[:2000]  # focus on first part of CV
             prompt = f"""
-Extract the candidate's current profession or job title from this CV excerpt.
-Return ONLY the job title/profession, nothing else. If unclear, return "Not Specified".
+            Extract the candidate's current profession or job title from this CV excerpt.
+            Return ONLY the job title/profession, nothing else. If unclear, return "Not Specified".
 
-CV excerpt:
-{cv_excerpt}
+            CV excerpt:
+            {cv_excerpt}
 
-Profession:
-"""
+            Profession:
+            """
             messages = [ChatMessage(role="user", content=prompt)]
             response = llm.chat(messages)
             profession = response.message.content
-            if profession and len(profession) <= 100:
+            if profession:
                 return profession.lower().strip()
+            else:
+                return "Not Specified"
         except Exception as e:
             print(f"LLM fallback failed: {e}")
 
@@ -152,10 +215,12 @@ def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) 
         name = FAMOUS_NAMES[i]
         cid = random.randint(1000, 9999)
         profession = extract_profession(doc.get_content())
+        skills = extract_skillset(doc.get_content())
 
         metadata_store[file_path] = {
             "candidate_name": name,
             "candidate_id": cid,
+            "skills": skills,
             "profession": profession.lower(),
         }
 
