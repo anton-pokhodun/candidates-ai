@@ -3,11 +3,14 @@
 import json
 from dotenv import load_dotenv
 
+from llama_index.core.prompts import PromptTemplate
+
 from llama_index.llms.openai import OpenAI
 from llama_index.core.agent.workflow import ReActAgent, AgentStream
 from llama_index.core.workflow import Context
 from llama_index.core.tools import FunctionTool
 from config import LLM_MODEL
+from prompts import AGET_SEARCH_CANDIDATES_PROMPT
 from tools import (
     search_candidates,
     search_wikipedia,
@@ -59,18 +62,6 @@ def create_agent() -> ReActAgent:
         llm=llm,
         verbose=False,
         max_iterations=3,  # Add this to limit agent steps
-        system_prompt="""
-            You are a ReAct agent. 
-            However:
-
-            - NEVER output "Thought:" to the user.
-            - NEVER output chain-of-thought.
-            - Only output a tool call OR a final answer.
-            - After receiving a tool result, provide ONE final answer and STOP.
-            - Never repeat your answer.
-            - Never continue generating Thoughts after giving an answer.
-            - If a tool already returned candidates, summarize them and end the response.
-            """,
     )
 
 
@@ -87,8 +78,9 @@ async def search_with_agent(query: str, top_k: int = 10):
     agent = create_agent()
     ctx = Context(agent)
 
-    # Get structured results (not currently used but available)
-    # structured_results = search_candidates_structured(query, top_k)
+    agent._update_prompts(
+        prompts={"react_header": PromptTemplate(template=AGET_SEARCH_CANDIDATES_PROMPT)}
+    )
 
     # Run agent and stream response
     handler = agent.run(query, ctx=ctx)
