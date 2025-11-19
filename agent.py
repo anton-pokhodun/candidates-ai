@@ -55,7 +55,22 @@ def create_agent() -> ReActAgent:
     ]
 
     return ReActAgent(
-        tools=tools, llm=llm, verbose=False, max_iterations=5, stop=["\nObservation:"]
+        tools=tools,
+        llm=llm,
+        verbose=False,
+        max_iterations=3,  # Add this to limit agent steps
+        system_prompt="""
+            You are a ReAct agent. 
+            However:
+
+            - NEVER output "Thought:" to the user.
+            - NEVER output chain-of-thought.
+            - Only output a tool call OR a final answer.
+            - After receiving a tool result, provide ONE final answer and STOP.
+            - Never repeat your answer.
+            - Never continue generating Thoughts after giving an answer.
+            - If a tool already returned candidates, summarize them and end the response.
+            """,
     )
 
 
@@ -80,7 +95,6 @@ async def search_with_agent(query: str, top_k: int = 10):
 
     async for ev in handler.stream_events():
         if isinstance(ev, AgentStream):
-            print(ev.delta)
             chunk_data = {"type": "content", "data": ev.delta}
             yield f"data: {json.dumps(chunk_data)}\n\n"
 

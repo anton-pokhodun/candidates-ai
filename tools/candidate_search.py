@@ -1,27 +1,30 @@
 """
 Agent-safe Candidate Search Tools
 ---------------------------------
-Fully rewritten to:
-- Deduplicate candidates
-- Normalize Chroma scores safely
-- Print raw + normalized scores
-- Keep JSON output intact
+Enhanced with:
+- LLM-based query parsing
+- Profession fuzzy matching
+- Skillset scoring
+- Combined ranking
+- Semantic fallback
 """
 
-from typing import Optional, List, Dict, Any
-from db_utils import get_vector_index
+import json
+from typing import Any, Dict, List
+
+from llama_index.core.llms import ChatMessage
+from rapidfuzz import fuzz
+
+from db_utils import get_llm, get_vector_index, load_existing_metadata
 
 
 # ---------------------------------------------------------
 # Score Normalization (Chroma = cosine similarity 0..1)
 # ---------------------------------------------------------
 def normalize_chroma_score(score: float) -> float:
-    """Normalize Chroma cosine similarity score to 0..1."""
     if score is None:
         score = 0.0
-    normalized = max(0.0, min(1.0, float(score)))
-    print(f"Raw Chroma score: {score}, Normalized: {normalized}")
-    return normalized
+    return max(0.0, min(1.0, float(score)))
 
 
 # ---------------------------------------------------------
@@ -34,23 +37,20 @@ def _truncate(text: str, max_chars: int = 400) -> str:
 
 
 # ---------------------------------------------------------
-# Deduplication & Normalization
+# Deduplication & Normalization for semantic search fallback
 # ---------------------------------------------------------
-def _dedupe_and_sort(results, top_k: int, min_score: float = 0.1):
+def _dedupe_and_sort(results, top_k: int):
     seen = set()
     unique = []
 
     for r in results:
         cid = r.node.metadata.get("candidate_id")
-        norm_score = max(0.0, min(1.0, float(r.score) if r.score else 0.0))
+        norm_score = normalize_chroma_score(r.score)
+
         if cid is None or cid in seen:
             continue
-        # if norm_score < min_score:
-        #     print(f"Skipping candidate {cid} below threshold: {norm_score:.2f}")
-        #     continue
 
         seen.add(cid)
-        print(f"Keeping candidate {cid}, normalized score: {norm_score:.3f}")
         unique.append({"node_with_score": r, "normalized_score": norm_score})
 
     unique.sort(key=lambda x: x["normalized_score"], reverse=True)
@@ -58,7 +58,7 @@ def _dedupe_and_sort(results, top_k: int, min_score: float = 0.1):
 
 
 # ---------------------------------------------------------
-# Serialize candidates for JSON output
+# Serialization for output
 # ---------------------------------------------------------
 def _serialize_candidates(filtered: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     serialized = []
@@ -82,36 +82,154 @@ def _serialize_candidates(filtered: List[Dict[str, Any]]) -> List[Dict[str, Any]
 
 
 # ---------------------------------------------------------
-# Main Search (Human-readable summary)
+# LLM Query parsing
 # ---------------------------------------------------------
-def search_candidates(query: str, top_k: int = 50) -> dict:
+def parse_query_with_llm(query: str) -> dict:
+    """
+    Returns JSON:
+    {
+        "profession": "history teacher",
+        "skills": ["curriculum planning", "classroom management"]
+    }
+    """
+    llm = get_llm()
+    prompt = f"""
+    Extract a profession and a list of skills from the query below.
+    Return ONLY valid JSON:
+    {{
+        "profession": string or null,
+        "skills": list of strings
+    }}
+
+    If no profession — return null.
+    If no skills — return [].
+
+    Query:
+    {query}
+
+    JSON:
+    """
+    messages = [ChatMessage(role="user", content=prompt)]
+    response = llm.chat(messages)
+
+    print(f"LLM extraction: {response.message.content}")
+
     try:
-        index = get_vector_index()
-        retriever = index.as_retriever(similarity_top_k=top_k * 5)
-        results = retriever.retrieve(query)
-    except Exception as e:
-        return {"success": False, "error": f"Search failed: {str(e)}"}
+        if response and response.message and response.message.content:
+            return json.loads(response.message.content)
+        return {"profession": None, "skills": []}
+    except Exception:
+        return {"profession": None, "skills": []}
+
+
+# ---------------------------------------------------------
+# Profession fuzzy matching
+# ---------------------------------------------------------
+def fuzzy_match_profession(target_profession: str, metadata: dict):
+    results = []
+    for file, meta in metadata.items():
+        candidate_prof = meta.get("profession", "").lower()
+        score = fuzz.partial_ratio(target_profession.lower(), candidate_prof)
+
+        results.append(
+            {
+                "file": file,
+                "candidate_id": meta.get("candidate_id"),
+                "candidate_name": meta.get("candidate_name"),
+                "profession": meta.get("profession"),
+                "skills": meta.get("skills", []),
+                "profession_score": score,
+            }
+        )
+
+    return sorted(results, key=lambda x: x["profession_score"], reverse=True)
+
+
+# ---------------------------------------------------------
+# Skill scoring
+# ---------------------------------------------------------
+def skill_overlap_score(query_skills, candidate_skills):
+    if not query_skills:
+        return 0.0
+    qs = set(s.lower() for s in query_skills)
+    cs = set(s.lower() for s in candidate_skills)
+    overlap = qs.intersection(cs)
+    return len(overlap) / len(qs)
+
+
+# ---------------------------------------------------------
+# Combine profession + skills into one score
+# ---------------------------------------------------------
+def rank_profession_and_skills(prof_matches, query_skills):
+    ranked = []
+    for m in prof_matches:
+        skill_score = skill_overlap_score(query_skills, m["skills"])
+        final = 0.7 * (m["profession_score"] / 100.0) + 0.3 * skill_score
+        m["skill_score"] = skill_score
+        m["final_score"] = final
+        ranked.append(m)
+
+    return sorted(ranked, key=lambda x: x["final_score"], reverse=True)
+
+
+# ---------------------------------------------------------
+# Semantic fallback search
+# ---------------------------------------------------------
+def semantic_search(query: str, top_k: int = 20):
+    index = get_vector_index()
+    retriever = index.as_retriever(similarity_top_k=top_k * 5)
+    results = retriever.retrieve(query)
 
     if not results:
-        return {"success": True, "text": "No candidates found.", "candidates": []}
+        return []
 
     filtered = _dedupe_and_sort(results, top_k)
-    print(f"Returning {len(filtered)} unique candidates after deduplication.")
+    return _serialize_candidates(filtered)
 
-    # Build short summary
-    lines = []
-    for idx, rdict in enumerate(filtered, 1):
-        r = rdict["node_with_score"]
-        norm_score = rdict["normalized_score"]
-        meta = r.node.metadata or {}
-        lines.append(
-            f"{idx}. {meta.get('candidate_name', 'Unknown')} "
-            f"(ID: {meta.get('candidate_id', 'N/A')}, Score: {norm_score:.3f})"
-        )
+
+# ---------------------------------------------------------
+# MAIN SEARCH PIPELINE
+# ---------------------------------------------------------
+def search_candidates(query: str, top_k: int = 20) -> dict:
+    print(f"🔍 New search query: {query}")
+
+    parsed = parse_query_with_llm(query)
+    profession = parsed["profession"]
+    skills = parsed["skills"]
+
+    print(f"Parsed → Profession: {profession}, Skills: {skills}")
+
+    metadata = load_existing_metadata()
+
+    # -----------------------------
+    # Stage A: Profession Match
+    # -----------------------------
+    if profession:
+        prof_matches = fuzzy_match_profession(profession, metadata)
+        ranked = rank_profession_and_skills(prof_matches, skills)
+
+        best_score = ranked[0]["final_score"] if ranked else 0
+        print(f"Best profession/skill score = {best_score:.3f}")
+
+        if best_score >= 0.60:
+            return {
+                "success": True,
+                "method": "profession_skill_match",
+                "query": query,
+                "parsed": parsed,
+                "candidates": ranked[:top_k],
+            }
+
+    # -----------------------------
+    # Stage B: Semantic fallback
+    # -----------------------------
+    print("⚠️ Falling back to semantic search...")
+    semantic = semantic_search(query, top_k=top_k)
 
     return {
         "success": True,
+        "method": "semantic_fallback",
         "query": query,
-        "summary": "\n".join(lines),
-        "candidates": _serialize_candidates(filtered),
+        "parsed": parsed,
+        "candidates": semantic,
     }
