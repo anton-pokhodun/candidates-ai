@@ -10,7 +10,6 @@ from llama_index.core.agent.workflow import ReActAgent, AgentStream
 from llama_index.core.workflow import Context
 from llama_index.core.tools import FunctionTool
 from config import LLM_MODEL
-from prompts import AGET_SEARCH_CANDIDATES_PROMPT
 from tools import (
     search_candidates,
     search_wikipedia,
@@ -77,10 +76,6 @@ async def search_with_agent(query: str, top_k: int = 10):
     """
     agent = create_agent()
     ctx = Context(agent)
-
-    agent._update_prompts(
-        prompts={"react_header": PromptTemplate(template=AGET_SEARCH_CANDIDATES_PROMPT)}
-    )
 
     # Run agent and stream response
     handler = agent.run(query, ctx=ctx)
