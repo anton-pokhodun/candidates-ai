@@ -3,7 +3,6 @@
 import json
 from dotenv import load_dotenv
 
-from llama_index.core.prompts import PromptTemplate
 
 from llama_index.llms.openai import OpenAI
 from llama_index.core.agent.workflow import ReActAgent, AgentStream
