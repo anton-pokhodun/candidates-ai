@@ -1,6 +1,7 @@
 """Simplified and verified index builder."""
 
 from typing import List
+from pathlib import Path
 import random
 from dotenv import load_dotenv
 import chromadb
@@ -208,8 +209,14 @@ def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) 
     for i, doc in enumerate(documents):
         file_path = doc.metadata.get("file_path", doc.doc_id)
 
-        if file_path in metadata_store:
-            print(f"Metadata exists for {file_path}, loading...")
+        # 1. Convert the file_path string into a Path object
+        path_object = Path(file_path)
+
+        # 2. Extract ONLY the file name (e.g., '49127329.pdf')
+        file_name = path_object.name
+
+        if file_name in metadata_store:
+            print(f"Metadata exists for {file_name}, loading...")
             continue
 
         name = FAMOUS_NAMES[i]
@@ -217,7 +224,7 @@ def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) 
         profession = extract_profession(doc.get_content())
         skills = extract_skillset(doc.get_content())
 
-        metadata_store[file_path] = {
+        metadata_store[file_name] = {
             "candidate_name": name,
             "candidate_id": cid,
             "skills": skills,
@@ -229,17 +236,17 @@ def assign_candidate_metadata(documents: List[Document], nodes: List[BaseNode]) 
 
     # Apply metadata to EVERY chunk
     for node in nodes:
-        file_path = node.metadata.get("file_path")
+        file_name = node.metadata.get("file_name")
 
-        if file_path in metadata_store:
-            node.metadata["candidate_name"] = metadata_store[file_path][
+        if file_name in metadata_store:
+            node.metadata["candidate_name"] = metadata_store[file_name][
                 "candidate_name"
             ]
-            node.metadata["candidate_id"] = metadata_store[file_path]["candidate_id"]
-            node.metadata["profession"] = metadata_store[file_path][
+            node.metadata["candidate_id"] = metadata_store[file_name]["candidate_id"]
+            node.metadata["profession"] = metadata_store[file_name][
                 "profession"
             ].lower()
-            node.metadata.setdefault("file_name", file_path)
+            node.metadata.setdefault("file_name", file_name)
             node.set_content(node.get_content().strip())
 
     print(f"Example chunk metadata:\n{nodes[0].metadata}")

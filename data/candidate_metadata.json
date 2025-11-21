@@ -1,0 +1,303 @@
+{
+  "47919212.pdf": {
+    "candidate_name": "Albert Einstein",
+    "candidate_id": 9230,
+    "skills": [
+      "windows platforms",
+      "system center",
+      "scom",
+      "virtualization",
+      "app-v",
+      "vmm",
+      "operations manager",
+      "orchestrator",
+      "service manager",
+      "azure"
+    ],
+    "profession": "support engineering manager"
+  },
+  "49127329.pdf": {
+    "candidate_name": "Leonardo da Vinci",
+    "candidate_id": 5823,
+    "skills": [
+      "project planning and development",
+      "strategic planning",
+      "lean manufacturing and design",
+      "analytical",
+      "procedure development",
+      "ms project"
+    ],
+    "profession": "737 industrial engineering manager"
+  },
+  "50328713.pdf": {
+    "candidate_name": "Nikola Tesla",
+    "candidate_id": 1614,
+    "skills": [
+      "c++",
+      "python",
+      "matlab",
+      "git",
+      "bash",
+      "r",
+      "sql",
+      "linux",
+      "unix",
+      "scikit-learn",
+      "pandas",
+      "seaborn",
+      "matplotlib",
+      "tensorflow",
+      "cfd-dem",
+      "openfoam",
+      "cfd-ace+",
+      "fluent",
+      "comsol",
+      "lammps",
+      "liggghts",
+      "cmg",
+      "fracpro",
+      "saphir",
+      "sem",
+      "afm",
+      "confocal microscopy",
+      "regression analysis",
+      "statistical process control",
+      "design of experiments"
+    ],
+    "profession": "engineering intern"
+  },
+  "51588273.pdf": {
+    "candidate_name": "Alan Turing",
+    "candidate_id": 8409,
+    "skills": [
+      "java",
+      "web services",
+      "agile",
+      "scrum",
+      "etl",
+      "php",
+      "visual studio",
+      "ssrs",
+      "ssis",
+      "iis",
+      "sharepoint",
+      "eclipse",
+      "apache",
+      "cognos",
+      "sql server",
+      "oracle",
+      "c#",
+      "asp.net",
+      "javascript",
+      "sql"
+    ],
+    "profession": "software engineering manager"
+  },
+  "51681660.pdf": {
+    "candidate_name": "Grace Hopper",
+    "candidate_id": 1525,
+    "skills": [
+      "ms word",
+      "powerpoint",
+      "photoshop",
+      "aftereffects",
+      "avid media",
+      "google sketchup"
+    ],
+    "profession": "production designer"
+  },
+  "54201930.pdf": {
+    "candidate_name": "Neil Armstrong",
+    "candidate_id": 7079,
+    "skills": [
+      "illustrator",
+      "photoshop",
+      "indesign",
+      "dreamweaver",
+      "flash",
+      "premier",
+      "freehand",
+      "logo design",
+      "editorial design",
+      "web design",
+      "illustration"
+    ],
+    "profession": "graphic designer"
+  },
+  "54227873.pdf": {
+    "candidate_name": "Rosa Parks",
+    "candidate_id": 6842,
+    "skills": [
+      "autocad mep",
+      "bim",
+      "ethernet",
+      "pneumatic controls",
+      "electronic controls",
+      "autocad",
+      "autodesk inventor",
+      "reverse osmosis multi element module",
+      "autodesk showcase",
+      "enterprise server",
+      "windows server 2012",
+      "vav",
+      "intelligent room sensors",
+      "industrial wireless network bridge"
+    ],
+    "profession": "engineering intern"
+  },
+  "62312955.pdf": {
+    "candidate_name": "Nelson Mandela",
+    "candidate_id": 1891,
+    "skills": [
+      "cad",
+      "photoshop",
+      "illustrator",
+      "indesign",
+      "microsoft office suite",
+      "windows",
+      "mac",
+      "zbrush",
+      "cinema 4d",
+      "vue",
+      "adobe creative suite",
+      "2d pattern engineering",
+      "gerber computer aided design systems"
+    ],
+    "profession": "graphic artist, designer"
+  },
+  "67645662.pdf": {
+    "candidate_name": "Mahatma Gandhi",
+    "candidate_id": 2603,
+    "skills": [
+      "osp engineering design",
+      "autocad",
+      "microstation",
+      "bstcad",
+      "national electrical safety code",
+      "connect america fund deployment",
+      "rus engineering methods and procedures"
+    ],
+    "profession": "osp engineering designer"
+  },
+  "71422121.pdf": {
+    "candidate_name": "Winston Churchill",
+    "candidate_id": 5844,
+    "skills": [
+      "windows 95",
+      "windows 98",
+      "windows 2000",
+      "windows 2007",
+      "windows nt",
+      "windows 7",
+      "windows xp",
+      "quality center",
+      "jira",
+      "oracle",
+      "sql server 2005",
+      "sql server 2008",
+      "internet explorer",
+      "firefox",
+      "chrome",
+      "safari",
+      "mercury interactive tools",
+      "test director",
+      "alm",
+      "apple-ios",
+      "android",
+      "windows mobile"
+    ],
+    "profession": "qa test analyst"
+  },
+  "72876163.pdf": {
+    "candidate_name": "George Washington",
+    "candidate_id": 7737,
+    "skills": [
+      "team leadership",
+      "budgeting and finance",
+      "project management",
+      "process implementation",
+      "staff development",
+      "data management",
+      "risk management processes and analysis"
+    ],
+    "profession": "regional it manager"
+  },
+  "73157997.pdf": {
+    "candidate_name": "Alexander Graham Bell",
+    "candidate_id": 5008,
+    "skills": [
+      "retail management",
+      "10-key by touch",
+      "ms office",
+      "powerpoint",
+      "customer service",
+      "scheduling",
+      "fluent in spanish",
+      "outlook",
+      "problem resolution",
+      "regulatory compliance",
+      "front-office operations",
+      "report preparation",
+      "marketing & sales",
+      "photoshop"
+    ],
+    "profession": "purchasing agent"
+  },
+  "74552449.pdf": {
+    "candidate_name": "Henry Ford",
+    "candidate_id": 1982,
+    "skills": [
+      "cash handling",
+      "financial analysis",
+      "ms excel",
+      "financial reporting",
+      "loan operations",
+      "ms office",
+      "team leadership",
+      "business negotiation",
+      "spanish speaking"
+    ],
+    "profession": "banking professional"
+  },
+  "77156708.pdf": {
+    "candidate_name": "Steve Jobs",
+    "candidate_id": 5246,
+    "skills": [
+      "confluence",
+      "jira",
+      "salesforce",
+      "sql",
+      "google g suite",
+      "keynote",
+      "microsoft office",
+      "accounting",
+      "recruitment",
+      "banking",
+      "sales",
+      "budget",
+      "credit",
+      "client",
+      "documentation",
+      "due diligence",
+      "finance",
+      "financial analysis",
+      "financial statements",
+      "mandarin",
+      "marketing",
+      "pos",
+      "presentations",
+      "pricing strategy",
+      "project management",
+      "public relations",
+      "purchasing",
+      "real estate"
+    ],
+    "profession": "banking officer"
+  },
+  "84356308.pdf": {
+    "candidate_name": "Elon Musk",
+    "candidate_id": 1398,
+    "skills": [],
+    "profession": "finance manager"
+  }
+}
