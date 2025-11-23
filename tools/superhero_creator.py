@@ -1,20 +1,24 @@
-"""Superhero candidate creator tool - Refactored."""
+"""
+SAFE Superhero Candidate Creator Tool
+-------------------------------------
+This tool MUST only be called when the user EXPLICITLY asks to create,
+merge, blend, or combine candidates into a superhero.
+
+It cannot be triggered from search tasks.
+"""
 
 import random
 from typing import List, Dict, Union
 from dataclasses import dataclass
 from llama_index.llms.openai import OpenAI
 
-# Assuming these are necessary for the retrieve function and configuration
 from db_utils import get_chroma_client
 from config import COLLECTION_NAME, LLM_MODEL
 
+
 # --- Constants ---
 
-# Removed MAX_CHARS_PER_CANDIDATE, MAX_RESPONSE_TOKENS, LLM_TIMEOUT
-# as their values are now directly used/set in the functions
-
-SUPERHERO_MIDDLE_NAMES: List[str] = [
+SUPERHERO_MIDDLE_NAMES = [
     "Dragon",
     "Beast",
     "Rock",
@@ -35,13 +39,12 @@ SUPERHERO_MIDDLE_NAMES: List[str] = [
     "Tiger",
 ]
 
+
 # --- Dataclasses ---
 
 
 @dataclass
 class CandidateData:
-    """Stores a single candidate's name and truncated content."""
-
     name: str
     content: str
     MAX_CHARS: int = 3000
@@ -49,156 +52,142 @@ class CandidateData:
 
 @dataclass
 class Superhero:
-    """Stores the final generated superhero profile."""
-
     name: str
     source_candidates: List[CandidateData]
     profile: str
 
 
-# --- Core Logic ---
+# --- PUBLIC ENTRY POINT (SAFE) ---
 
 
-def create_superhero(candidate_names: str) -> str:
+def build_superhero(candidate_names: str, *, force_superhero: bool = False) -> str:
     """
-    Create a superhero candidate by combining skills from 2-3 candidates.
+    SAFE ENTRY POINT.
+
+    This function will ONLY run if force_superhero=True.
+    The agent layer should set force_superhero=True ONLY when the user
+    explicitly asks to create a superhero.
+
+    This prevents accidental tool invocation during candidate searches.
     """
+
+    if not force_superhero:
+        return (
+            "Error: Superhero creation was attempted without explicit user request. "
+            "This tool must only run when the user explicitly asks to create a superhero."
+        )
+
     try:
-        names = [name.strip() for name in candidate_names.split(",")]
+        names = [n.strip() for n in candidate_names.split(",") if n.strip()]
 
         if not (2 <= len(names) <= 3):
-            return "Error: Please provide 2 or 3 candidate names separated by commas."
+            return "Error: Please provide exactly 2 or 3 candidate names."
 
-        candidates_data: Union[List[CandidateData], str] = _retrieve_candidates(names)
+        candidates_data = _retrieve_candidates(names)
 
-        if isinstance(candidates_data, str):  # Error message
+        if isinstance(candidates_data, str):  # error string
             return candidates_data
 
-        superhero_name = _generate_superhero_name(candidates_data)
-        profile = _generate_superhero_profile(candidates_data, superhero_name)
+        superhero_name = _make_superhero_name(candidates_data)
+        profile = _make_superhero_profile(candidates_data, superhero_name)
 
-        superhero_result = Superhero(
-            name=superhero_name, source_candidates=candidates_data, profile=profile
-        )
-
-        return _format_superhero_output(superhero_result)
-
-    except Exception as e:
-        return f"Error creating superhero: {str(e)}"
-
-
-def _retrieve_candidates(names: List[str]) -> Union[List[CandidateData], str]:
-    """Retrieve candidate data from ChromaDB and return as a list of CandidateData objects."""
-    chroma_client = get_chroma_client()
-    collection = chroma_client.get_collection(name=COLLECTION_NAME)
-
-    candidates_data: List[CandidateData] = []
-
-    for candidate_name in names:
-        results = collection.get(
-            where={"candidate_name": candidate_name},
-            include=["documents"],
-        )
-
-        if not results["documents"]:
-            return f"Error: Candidate with name '{candidate_name}' not found."
-
-        full_content = " ".join(results["documents"])
-
-        # Apply truncation logic using the dataclass attribute
-        max_chars = CandidateData.MAX_CHARS
-        truncated_content = full_content[:max_chars]
-        if len(full_content) > max_chars:
-            truncated_content += "... [truncated]"
-
-        candidates_data.append(
-            CandidateData(
-                name=candidate_name,
-                content=truncated_content,
+        return _format_superhero_output(
+            Superhero(
+                name=superhero_name, source_candidates=candidates_data, profile=profile
             )
         )
 
-    return candidates_data
+    except Exception as e:
+        return f"Error creating superhero: {e}"
 
 
-def _generate_superhero_name(candidates_data: List[CandidateData]) -> str:
-    """Generate a superhero name from candidate names."""
-
-    # Safely get the first/last names from the first two candidates
-    first_name_parts = candidates_data[0].name.split()
-    last_name_parts = candidates_data[1].name.split()
-
-    first_name = first_name_parts[0] if first_name_parts else "Super"
-    last_name = (
-        last_name_parts[-1]
-        if len(last_name_parts) > 1
-        else last_name_parts[0]
-        if last_name_parts
-        else "Hero"
-    )
-
-    middle_name = random.choice(SUPERHERO_MIDDLE_NAMES)
-    return f"{first_name} '{middle_name}' {last_name}"
+# --- Helpers ---
 
 
-def _generate_superhero_profile(
-    candidates_data: List[CandidateData], superhero_name: str
-) -> str:
-    """Generate superhero profile using LLM."""
+def _retrieve_candidates(names: List[str]) -> Union[List[CandidateData], str]:
+    client = get_chroma_client()
+    collection = client.get_collection(name=COLLECTION_NAME)
+
+    results_accumulated: List[CandidateData] = []
+
+    for name in names:
+        res = collection.get(where={"candidate_name": name}, include=["documents"])
+
+        if not res["documents"]:
+            return f"Error: Candidate '{name}' not found."
+
+        full = " ".join(res["documents"])
+        max_chars = CandidateData.MAX_CHARS
+        truncated = full[:max_chars] + (
+            "... [truncated]" if len(full) > max_chars else ""
+        )
+
+        results_accumulated.append(CandidateData(name=name, content=truncated))
+
+    return results_accumulated
+
+
+def _make_superhero_name(candidates: List[CandidateData]) -> str:
+    """Generate a superhero name."""
+    first_parts = candidates[0].name.split()
+    second_parts = candidates[1].name.split()
+
+    first = first_parts[0] if first_parts else "Super"
+    last = second_parts[-1] if second_parts else "Hero"
+
+    middle = random.choice(SUPERHERO_MIDDLE_NAMES)
+    return f"{first} '{middle}' {last}"
+
+
+def _make_superhero_profile(candidates: List[CandidateData], name: str) -> str:
+    """Generate superhero profile body text (NO TOOL LOGIC IN PROMPT!)."""
 
     llm = OpenAI(
         model=LLM_MODEL,
         temperature=0.3,
-        max_tokens=1000,  # Used constant value
-        timeout=30.0,  # Used constant value
+        max_tokens=1000,
+        timeout=30.0,
     )
 
-    candidates_info = "\n\n".join(
-        [
-            f"Candidate {i + 1} ({data.name}):\n{data.content}"
-            for i, data in enumerate(candidates_data)
-        ]
+    candidate_bodies = "\n\n".join(
+        f"Candidate {i + 1} — {c.name}:\n{c.content}" for i, c in enumerate(candidates)
     )
 
-    prompt = f"""You are creating a "superhero" candidate by combining the best skills and qualifications from multiple candidates.
+    prompt = f"""
+You are combining the following candidates into a single elite 'superhero' résumé.
 
-Here are the candidates:
+Superhero Name: {name}
 
-{candidates_info}
+Combine their strongest:
+- skills
+- experiences
+- technologies
+- achievements
 
-Task:
-1. Extract the key skills, technologies, experiences, and qualifications from each candidate
-2. Combine them into one comprehensive profile highlighting the BEST and most impressive aspects from each
-3. Remove duplicates and organize by category (Technical Skills, Experience, Education, etc.)
-4. Make it read like a powerful, combined resume profile
-5. Keep the response concise and under 800 words
+Remove duplicates. Organize clearly.
+Keep concise (under 800 words).
 
-Superhero Name: {superhero_name}
+Candidate Data:
+{candidate_bodies}
 
-Create a compelling superhero candidate profile:"""
+Now produce the final merged profile:
+"""
 
-    response = llm.complete(prompt)
-    return response.text
+    return llm.complete(prompt).text
 
 
-def _format_superhero_output(superhero: Superhero) -> str:
-    """Format the final Superhero output using the dataclass."""
-
-    candidate_names = ", ".join([data.name for data in superhero.source_candidates])
-    num_candidates = len(superhero.source_candidates)
-
+def _format_superhero_output(hero: Superhero) -> str:
+    names = ", ".join(c.name for c in hero.source_candidates)
     return f"""
-🦸 SUPERHERO CANDIDATE CREATED! 🦸
+🦸 SUPERHERO CREATED 🦸
 
-Name: {superhero.name}
-Combined from: {num_candidates} candidates
-- {candidate_names}
+Name: {hero.name}
+Combined from {len(hero.source_candidates)} candidates:
+- {names}
 
-{"-" * 80}
+--------------------------------------------------------------------------------
 
-{superhero.profile}
+{hero.profile}
 
-{"-" * 80}
-
-This superhero candidate combines the best qualities from all {num_candidates} candidates!
+--------------------------------------------------------------------------------
 """

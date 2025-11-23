@@ -2,10 +2,10 @@
 
 from .candidate_search import search_candidates
 from .wikipedia_search import search_wikipedia
-from .superhero_creator import create_superhero
+from .superhero_creator import build_superhero
 
 __all__ = [
     "search_candidates",
     "search_wikipedia",
-    "create_superhero",
+    "build_superhero",
 ]

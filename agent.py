@@ -12,7 +12,7 @@ from config import LLM_MODEL
 from tools import (
     search_candidates,
     search_wikipedia,
-    create_superhero,
+    build_superhero,
 )
 
 load_dotenv()
@@ -44,13 +44,13 @@ def create_agent() -> ReActAgent:
             ),
         ),
         FunctionTool.from_defaults(
-            fn=create_superhero,
-            name="create_superhero",
+            fn=build_superhero,
+            name="build_superhero",
             description=(
-                "Create a superhero candidate by combining the best skills from 2-3 candidates. "
-                "Provide comma-separated candidate names (e.g., 'John Doe,Jane Smith'). "
-                "The superhero's name will be the first name of the first candidate "
-                "and last name of the second candidate."
+                "Create a superhero candidate by COMBINING 2–3 candidates. "
+                "Use ONLY when the user EXPLICITLY says to 'combine', 'merge', 'blend', "
+                "'make a superhero', or 'create a superhero'. "
+                "NEVER use this tool for normal searches."
             ),
         ),
     ]
